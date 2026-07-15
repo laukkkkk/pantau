@@ -22,6 +22,7 @@ app.use(morgan('dev'));
 app.use('/api', healthRouter);
 app.use('/api', require('./routes/sensor'));
 app.use('/api', require('./routes/biaya'));
+app.use('/api', require('./routes/siklus'));
 
 // Global Error Handler
 app.use(errorHandler);
