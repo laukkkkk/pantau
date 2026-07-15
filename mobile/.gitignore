@@ -1,32 +1,45 @@
-# Javascript/Node Dependencies
+# dependencies
 node_modules/
-.pnpm-store/
-jspm_packages/
-web_modules/
 
-# React Native/Expo
+# Expo
 .expo/
 dist/
 web-build/
+expo-env.d.ts
 
-# Flutter/Dart Build Files
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.packages
-.pub-cache/
-.pub/
-build/
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+/ios
+/android
 
-# Android Build & Config
-.gradle/
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files & custom env configurations
+.env
+.env.production
+.env.staging
+.env.development
+.env.local
+.env*.local
+
+# Android / iOS configurations
 local.properties
-*.apk
-*.aar
-*.ap_
-*.aab
-
-# iOS Build & Config
 Pods/
 DerivedData/
 *.pbxuser
@@ -35,9 +48,5 @@ DerivedData/
 *.perspectivev3
 xcuserdata/
 
-# Environment Variables
-.env
-.env.production
-.env.staging
-.env.development
-.env.local
+# typescript
+*.tsbuildinfo
