@@ -1,0 +1,44 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Python Virtual Environments
+venv/
+.venv/
+ENV/
+env/
+
+# Environment Variables
+.env
+.env.production
+.env.staging
+.env.development
+.env.local
+
+# ML/AI Models & Large Files (Weights & Checkpoints)
+*.bin
+*.pt
+*.pth
+*.pkl
+*.h5
+*.onnx
+*.weights
+*.ckpt
+*.pb
+
+# Datasets and Large Data Folders
+data/
+dataset/
+datasets/
+temp/
