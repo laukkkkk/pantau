@@ -4,10 +4,8 @@ import { Platform } from 'react-native';
 // Android Emulator connects to localhost via 10.0.2.2
 // iOS Simulator and Web connect directly to localhost (or custom IP)
 const getBaseUrl = () => {
-  if (Platform.OS === 'android') {
-    return 'http://10.0.2.2:5001/api';
-  }
-  return 'http://localhost:5001/api';
+  // Menggunakan IP lokal komputer agar HP fisik (via Wi-Fi) dan emulator bisa terhubung.
+  return 'http://192.168.101.10:5001/api';
 };
 
 const api = axios.create({
