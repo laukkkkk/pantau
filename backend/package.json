@@ -10,7 +10,8 @@
     "seed": "sequelize db:seed:all",
     "seed:undo": "sequelize db:seed:undo:all",
     "seed:sensor": "node scripts/generateSensorDummy.js",
-    "test:hpp": "node tests/hpp.test.js"
+    "test:hpp": "node tests/hpp.test.js",
+    "test:rekomendasi": "node tests/rekomendasi.test.js"
   },
   "dependencies": {
     "@turf/turf": "^7.3.5",

@@ -25,6 +25,7 @@ app.use('/api', require('./routes/biaya'));
 app.use('/api', require('./routes/siklus'));
 app.use('/api', require('./routes/laporan'));
 app.use('/api', require('./routes/lahan'));
+app.use('/api', require('./routes/rekomendasi'));
 
 // Global Error Handler
 app.use(errorHandler);
