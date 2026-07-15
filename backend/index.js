@@ -21,6 +21,7 @@ app.use(morgan('dev'));
 // Routing
 app.use('/api', healthRouter);
 app.use('/api', require('./routes/sensor'));
+app.use('/api', require('./routes/biaya'));
 
 // Global Error Handler
 app.use(errorHandler);
