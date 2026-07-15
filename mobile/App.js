@@ -8,6 +8,7 @@ import DashboardScreen from './src/screens/DashboardScreen';
 import MonitoringScreen from './src/screens/MonitoringScreen';
 import AccountingScreen from './src/screens/AccountingScreen';
 import GisScreen from './src/screens/GisScreen';
+import KegiatanScreen from './src/screens/KegiatanScreen';
 import { colors } from './src/theme/colors';
 
 const Tab = createBottomTabNavigator();
@@ -29,6 +30,8 @@ export default function App() {
               iconName = 'cash-outline';
             } else if (route.name === 'GIS') {
               iconName = 'map-outline';
+            } else if (route.name === 'Kegiatan') {
+              iconName = 'calendar-outline';
             }
 
             return <Ionicons name={iconName} size={size} color={color} />;
@@ -58,6 +61,7 @@ export default function App() {
         <Tab.Screen name="Monitoring" component={MonitoringScreen} />
         <Tab.Screen name="Accounting" component={AccountingScreen} />
         <Tab.Screen name="GIS" component={GisScreen} />
+        <Tab.Screen name="Kegiatan" component={KegiatanScreen} />
       </Tab.Navigator>
     </NavigationContainer>
   );

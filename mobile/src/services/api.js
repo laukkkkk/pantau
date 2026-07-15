@@ -265,4 +265,124 @@ export const getLatestSensor = async () => {
   }
 };
 
+/**
+ * Gets all fertilizer recommendation history logs.
+ * Hit GET /api/rekomendasi-pupuk
+ */
+export const getRekomendasiPupuk = async () => {
+  try {
+    const response = await api.get('/rekomendasi-pupuk');
+    return {
+      success: true,
+      data: response.data.data
+    };
+  } catch (error) {
+    console.warn('API getRekomendasiPupuk failed:', error.message);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+/**
+ * Generates a new fertilizer recommendation log.
+ * Hit POST /api/rekomendasi-pupuk
+ */
+export const createRekomendasiPupuk = async (sensorData = {}) => {
+  try {
+    const response = await api.post('/rekomendasi-pupuk', sensorData);
+    return {
+      success: true,
+      data: response.data.data
+    };
+  } catch (error) {
+    console.warn('API createRekomendasiPupuk failed:', error.message);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+/**
+ * Updates a fertilizer recommendation status/dosage/comments.
+ * Hit PATCH /api/rekomendasi-pupuk/:id
+ */
+export const updateRekomendasiPupuk = async (id, data) => {
+  try {
+    const response = await api.patch(`/rekomendasi-pupuk/${id}`, data);
+    return {
+      success: true,
+      data: response.data.data
+    };
+  } catch (error) {
+    console.warn('API updateRekomendasiPupuk failed:', error.message);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+/**
+ * Gets all activity schedules.
+ * Hit GET /api/jadwal-kegiatan
+ */
+export const getJadwalKegiatan = async () => {
+  try {
+    const response = await api.get('/jadwal-kegiatan');
+    return {
+      success: true,
+      data: response.data.data
+    };
+  } catch (error) {
+    console.warn('API getJadwalKegiatan failed:', error.message);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+/**
+ * Creates a new schedule task.
+ * Hit POST /api/jadwal-kegiatan
+ */
+export const createJadwalKegiatan = async (data) => {
+  try {
+    const response = await api.post('/jadwal-kegiatan', data);
+    return {
+      success: true,
+      data: response.data.data
+    };
+  } catch (error) {
+    console.warn('API createJadwalKegiatan failed:', error.message);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+/**
+ * Updates status or other fields of a schedule.
+ * Hit PATCH /api/jadwal-kegiatan/:id
+ */
+export const updateJadwalKegiatan = async (id, data) => {
+  try {
+    const response = await api.patch(`/jadwal-kegiatan/${id}`, data);
+    return {
+      success: true,
+      data: response.data.data
+    };
+  } catch (error) {
+    console.warn('API updateJadwalKegiatan failed:', error.message);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
 export default api;

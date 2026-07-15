@@ -81,7 +81,7 @@ exports.createRekomendasi = async (req, res, next) => {
 exports.updateRekomendasi = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { rekomendasi, dosis } = req.body;
+    const { rekomendasi, dosis, status } = req.body;
 
     const record = await RekomendasiPupuk.findByPk(id);
     if (!record) {
@@ -94,6 +94,7 @@ exports.updateRekomendasi = async (req, res, next) => {
     const updates = {};
     if (rekomendasi !== undefined) updates.rekomendasi = rekomendasi;
     if (dosis !== undefined) updates.dosis = dosis;
+    if (status !== undefined) updates.status = status;
 
     await record.update(updates);
 

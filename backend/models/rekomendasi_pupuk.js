@@ -21,6 +21,11 @@ module.exports = (sequelize, DataTypes) => {
     tanggal: {
       type: DataTypes.DATE,
       allowNull: false
+    },
+    status: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'BELUM_SELESAI'
     }
   }, {
     tableName: 'rekomendasi_pupuk',
