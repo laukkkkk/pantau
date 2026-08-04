@@ -5,10 +5,10 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 
 import DashboardScreen from './src/screens/DashboardScreen';
-import MonitoringScreen from './src/screens/MonitoringScreen';
 import AccountingScreen from './src/screens/AccountingScreen';
-import GisScreen from './src/screens/GisScreen';
 import KegiatanScreen from './src/screens/KegiatanScreen';
+import ScanHamaScreen from './src/screens/ScanHamaScreen';
+import EdukasiScreen from './src/screens/EdukasiScreen';
 import { colors } from './src/theme/colors';
 
 const Tab = createBottomTabNavigator();
@@ -24,14 +24,14 @@ export default function App() {
 
             if (route.name === 'Dashboard') {
               iconName = 'grid-outline';
-            } else if (route.name === 'Monitoring') {
-              iconName = 'leaf-outline';
+            } else if (route.name === 'Scan Hama') {
+              iconName = 'camera-outline';
             } else if (route.name === 'Accounting') {
               iconName = 'cash-outline';
-            } else if (route.name === 'GIS') {
-              iconName = 'map-outline';
             } else if (route.name === 'Kegiatan') {
               iconName = 'calendar-outline';
+            } else if (route.name === 'Edukasi') {
+              iconName = 'book-outline';
             }
 
             return <Ionicons name={iconName} size={size} color={color} />;
@@ -58,10 +58,10 @@ export default function App() {
         })}
       >
         <Tab.Screen name="Dashboard" component={DashboardScreen} />
-        <Tab.Screen name="Monitoring" component={MonitoringScreen} />
+        <Tab.Screen name="Scan Hama" component={ScanHamaScreen} />
         <Tab.Screen name="Accounting" component={AccountingScreen} />
-        <Tab.Screen name="GIS" component={GisScreen} />
         <Tab.Screen name="Kegiatan" component={KegiatanScreen} />
+        <Tab.Screen name="Edukasi" component={EdukasiScreen} />
       </Tab.Navigator>
     </NavigationContainer>
   );

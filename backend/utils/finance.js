@@ -19,13 +19,19 @@ function calculateHPPAndProfit(totalBiaya, hasilPanen, hargaJualEstimasi) {
   const total_pendapatan = hasil_panen * harga_jual;
   const keuntungan = total_pendapatan - total_biaya;
 
+  // BEP calculations
+  const bep_volume = harga_jual > 0 ? total_biaya / harga_jual : 0;
+  const bep_omset = bep_volume * harga_jual;
+
   // Format ke 2 desimal
   return {
     total_biaya: parseFloat(total_biaya.toFixed(2)),
     hasil_panen: parseFloat(hasil_panen.toFixed(2)),
     hpp: parseFloat(hpp.toFixed(2)),
     total_pendapatan: parseFloat(total_pendapatan.toFixed(2)),
-    keuntungan: parseFloat(keuntungan.toFixed(2))
+    keuntungan: parseFloat(keuntungan.toFixed(2)),
+    bep_volume: parseFloat(bep_volume.toFixed(2)),
+    bep_omset: parseFloat(bep_omset.toFixed(2))
   };
 }
 

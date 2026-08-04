@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny for all collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Allow public create with validation for sensor_data
+    match /sensor_data/{document} {
+      allow create: if request.resource.data.kelembaban is number 
+                    && request.resource.data.pH is number 
+                    && request.resource.data.bedeng_id is string;
+      allow read, update, delete: if false;
+    }
+
+    // Allow public read for device_assignment so Gateway can query it
+    match /device_assignment/{deviceId} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}

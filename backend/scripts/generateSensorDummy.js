@@ -1,11 +1,18 @@
-const { SensorData } = require('../models');
+const { db, SensorData } = require('../models');
 
 async function run() {
-  console.log('--- START GENERATING DUMMY SENSOR DATA ---');
+  console.log('--- START GENERATING DUMMY SENSOR DATA (FIRESTORE) ---');
   try {
-    // Truncate existing data to start fresh for the demo
-    await SensorData.destroy({ where: {}, force: true });
-    console.log('✓ Existing sensor data cleared.');
+    // 1. Clear existing sensor data (Firestore batch delete)
+    const snapshot = await SensorData.get();
+    if (!snapshot.empty) {
+      const deleteBatch = db.batch();
+      snapshot.forEach(doc => {
+        deleteBatch.delete(doc.ref);
+      });
+      await deleteBatch.commit();
+      console.log('✓ Existing sensor data cleared.');
+    }
 
     const dummyRecords = [];
     const now = Date.now();
@@ -13,29 +20,36 @@ async function run() {
 
     // Loop 30 days backwards to create a clean daily history
     for (let i = 29; i >= 0; i--) {
-      const timestamp = new Date(now - i * oneDayInMs);
+      const timestamp = new Date(now - i * oneDayInMs).toISOString();
 
-      // Organic wavy patterns using mathematical functions + minor random noise
-      const pH = parseFloat((6.4 + Math.sin(i / 3.0) * 0.4 + (Math.random() - 0.5) * 0.1).toFixed(2));
-      const kelembaban = parseFloat((74.0 + Math.cos(i / 4.0) * 6.0 + (Math.random() - 0.5) * 2.0).toFixed(1));
-      const N = parseFloat((54.0 + Math.sin(i / 5.0) * 5.0 + (Math.random() - 0.5) * 2.0).toFixed(1));
-      const P = parseFloat((39.0 + Math.cos(i / 3.0) * 3.5 + (Math.random() - 0.5) * 1.5).toFixed(1));
-      const K = parseFloat((64.0 + Math.sin(i / 4.0) * 6.0 + (Math.random() - 0.5) * 2.0).toFixed(1));
+      for (let b = 1; b <= 16; b++) {
+        // Organic wavy patterns using mathematical functions + minor random noise
+        const pH = parseFloat((6.4 + Math.sin((i + b) / 3.0) * 0.4 + (Math.random() - 0.5) * 0.1).toFixed(2));
+        const kelembaban = parseFloat((74.0 + Math.cos((i - b) / 4.0) * 6.0 + (Math.random() - 0.5) * 2.0).toFixed(1));
 
-      dummyRecords.push({
-        pH,
-        kelembaban,
-        N,
-        P,
-        K,
-        timestamp,
-        createdAt: new Date(),
-        updatedAt: new Date()
-      });
+        dummyRecords.push({
+          pH,
+          kelembaban,
+          bedeng_id: String(b),
+          timestamp,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
     }
 
-    await SensorData.bulkCreate(dummyRecords);
-    console.log('✓ Successfully populated 30 days of sensor records to the database.');
+    // 2. Perform batched writes (Firestore limits batches to 500 operations. We have exactly 480 operations)
+    const writeBatch = db.batch();
+    dummyRecords.forEach(record => {
+      const docRef = SensorData.doc();
+      writeBatch.set(docRef, {
+        id: docRef.id,
+        ...record
+      });
+    });
+    await writeBatch.commit();
+
+    console.log('✓ Successfully populated 30 days of sensor records to Firestore (480 documents).');
     console.log('--- GENERATOR COMPLETED SUCCESSFULLY ---');
     process.exit(0);
   } catch (error) {

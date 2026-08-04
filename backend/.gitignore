@@ -29,3 +29,11 @@ pids
 .env.staging
 .env.development
 .env.local
+
+# Firebase service account credentials
+firebase-service-account.json
+pantau-apps-hma2026-firebase-adminsdk-fbsvc-*.json
+
+# Uploads
+uploads/
+

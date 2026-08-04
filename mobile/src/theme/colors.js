@@ -23,5 +23,25 @@ export const colors = {
   // Grid / Sensor highlights
   phColor: 'hsl(262, 52%, 47%)',      // Indigo pH
   tempColor: 'hsl(360, 67%, 44%)',    // Coral Temp
-  humidityColor: 'hsl(199, 89%, 48%)' // Blue Humidity
+  humidityColor: 'hsl(199, 89%, 48%)', // Blue Humidity
+
+  // Common UI aliases
+  white: 'hsl(0, 0%, 100%)',
+  shadow: 'hsl(140, 40%, 12%)',
+  overlay: 'rgba(0, 0, 0, 0.5)'
 };
+
+export function withAlpha(color, opacity) {
+  if (!color) return 'transparent';
+  if (color.startsWith('hsl(')) {
+    return color.replace('hsl(', 'hsla(').replace(')', `, ${opacity})`);
+  }
+  if (color.startsWith('rgb(')) {
+    return color.replace('rgb(', 'rgba(').replace(')', `, ${opacity})`);
+  }
+  if (color.startsWith('#')) {
+    const alphaHex = Math.round(opacity * 255).toString(16).padStart(2, '0');
+    return `${color}${alphaHex}`;
+  }
+  return color;
+}

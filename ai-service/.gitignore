@@ -30,6 +30,7 @@ env/
 *.bin
 *.pt
 *.pth
+!models/pest_classifier.pth
 *.pkl
 *.h5
 *.onnx

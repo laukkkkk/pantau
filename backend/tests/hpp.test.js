@@ -34,6 +34,22 @@ try {
   assert.strictEqual(res3.keuntungan, -8000000); // rugi sebesar total biaya
   console.log('✓ Scenario 3 passed.');
 
+  // Skenario 4: Siklus dengan hasil_panen terisi (> 0) menghasilkan HPP, BEP Volume, BEP Omset, & Estimasi Pendapatan non-nol
+  console.log('Running Scenario 4: Valid Harvest Yield (> 0) generating non-zero BEP & Revenue...');
+  const res4 = calculateHPPAndProfit(10000000, 500, 25000); // Biaya 10jt, Panen 500kg, Harga 25rb/kg
+  assert.strictEqual(res4.total_biaya, 10000000);
+  assert.strictEqual(res4.hasil_panen, 500);
+  assert.strictEqual(res4.hpp, 20000); // 10.000.000 / 500 = 20.000 / kg
+  assert.strictEqual(res4.total_pendapatan, 12500000); // 500 * 25.000 = 12.500.000
+  assert.strictEqual(res4.keuntungan, 2500000); // 12.500.000 - 10.000.000 = 2.500.000
+  assert.strictEqual(res4.bep_volume, 400); // 10.000.000 / 25.000 = 400 kg
+  assert.strictEqual(res4.bep_omset, 10000000); // 400 * 25.000 = 10.000.000
+  assert.ok(res4.hpp > 0, 'HPP must be greater than 0');
+  assert.ok(res4.bep_volume > 0, 'BEP Volume must be greater than 0');
+  assert.ok(res4.bep_omset > 0, 'BEP Omset must be greater than 0');
+  assert.ok(res4.total_pendapatan > 0, 'Total Pendapatan must be greater than 0');
+  console.log('✓ Scenario 4 passed.');
+
   console.log('\n========================================');
   console.log('🎉 ALL HPP UNIT TESTS COMPLETED SUCCESSFULLY!');
   console.log('========================================');

@@ -6,9 +6,21 @@ const { JadwalKegiatan } = require('../models');
  */
 exports.getJadwal = async (req, res, next) => {
   try {
-    const list = await JadwalKegiatan.findAll({
-      order: [['tanggal', 'ASC']]
+    const { kategori } = req.query;
+    let query = JadwalKegiatan;
+    
+    if (kategori) {
+      query = query.where('kategori', '==', kategori);
+    }
+
+    const snapshot = await query.get();
+    const list = [];
+    snapshot.forEach(doc => {
+      list.push(doc.data());
     });
+
+    // Sort by tanggal ASC
+    list.sort((a, b) => new Date(a.tanggal) - new Date(b.tanggal));
 
     res.status(200).json({
       success: true,
@@ -25,7 +37,7 @@ exports.getJadwal = async (req, res, next) => {
  */
 exports.createJadwal = async (req, res, next) => {
   try {
-    const { nama_kegiatan, tanggal, status, deskripsi } = req.body;
+    const { nama_kegiatan, tanggal, status, deskripsi, kategori } = req.body;
 
     if (!nama_kegiatan || !tanggal) {
       return res.status(400).json({
@@ -34,12 +46,19 @@ exports.createJadwal = async (req, res, next) => {
       });
     }
 
-    const jadwalBaru = await JadwalKegiatan.create({
+    const docRef = JadwalKegiatan.doc();
+    const jadwalBaru = {
+      id: docRef.id,
       nama_kegiatan,
-      tanggal,
+      tanggal: new Date(tanggal).toISOString(),
       status: status || 'BELUM_MULAI',
-      deskripsi
-    });
+      deskripsi: deskripsi || '',
+      kategori: kategori || 'Tani',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    await docRef.set(jadwalBaru);
 
     res.status(201).json({
       success: true,
@@ -58,28 +77,62 @@ exports.createJadwal = async (req, res, next) => {
 exports.updateJadwal = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { nama_kegiatan, tanggal, status, deskripsi } = req.body;
+    const { nama_kegiatan, tanggal, status, deskripsi, kategori } = req.body;
 
-    const record = await JadwalKegiatan.findByPk(id);
-    if (!record) {
+    const docRef = JadwalKegiatan.doc(String(id));
+    const doc = await docRef.get();
+    if (!doc.exists) {
       return res.status(404).json({
         success: false,
         message: `Jadwal kegiatan dengan ID ${id} tidak ditemukan.`
       });
     }
 
-    const updates = {};
+    const updates = {
+      updatedAt: new Date().toISOString()
+    };
     if (nama_kegiatan !== undefined) updates.nama_kegiatan = nama_kegiatan;
-    if (tanggal !== undefined) updates.tanggal = tanggal;
+    if (tanggal !== undefined) updates.tanggal = new Date(tanggal).toISOString();
     if (status !== undefined) updates.status = status;
     if (deskripsi !== undefined) updates.deskripsi = deskripsi;
+    if (kategori !== undefined) updates.kategori = kategori;
 
-    await record.update(updates);
+    await docRef.update(updates);
+
+    const updatedDoc = await docRef.get();
 
     res.status(200).json({
       success: true,
       message: 'Jadwal kegiatan berhasil diperbarui.',
-      data: record
+      data: updatedDoc.data()
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Menghapus entri jadwal kegiatan
+ * DELETE /api/jadwal-kegiatan/:id
+ */
+exports.deleteJadwal = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const docRef = JadwalKegiatan.doc(String(id));
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
+      return res.status(404).json({
+        success: false,
+        message: `Jadwal kegiatan dengan ID ${id} tidak ditemukan.`
+      });
+    }
+
+    await docRef.delete();
+
+    res.status(200).json({
+      success: true,
+      message: `Jadwal kegiatan dengan ID ${id} berhasil dihapus.`
     });
   } catch (error) {
     next(error);

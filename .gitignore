@@ -16,11 +16,16 @@ desktop.ini
 .classpath
 .settings/
 
-# Local Environment Overrides (Not to be committed)
+# Environment Variables (Crucial to ignore)
+.env
+.env.production
+.env.staging
+.env.development
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
+
+# Firebase credentials
+firebase-service-account.json
+pantau-apps-hma2026-firebase-adminsdk-fbsvc-*.json
 
 # Logs
 logs

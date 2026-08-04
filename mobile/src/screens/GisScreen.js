@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, ActivityIndicator, Alert, TouchableOpacity, RefreshControl, Platform } from 'react-native';
-import { getLahanProfile, getLatestSensor } from '../services/api';
+import { getLahanProfile, getBedengList } from '../services/api';
 import { colors } from '../theme/colors';
 
 // Conditional native import to avoid web webpack build compilation failures
@@ -16,35 +16,95 @@ if (Platform.OS !== 'web') {
   }
 }
 
+const LAND_COVERS = [
+  {
+    id: 'hutan',
+    name: 'Hutan / Vegetasi Keras',
+    color: '#2e7d32',
+    fillColor: 'rgba(46, 125, 50, 0.25)',
+    coordinates: [
+      { latitude: -6.6920, longitude: 106.8470 },
+      { latitude: -6.6860, longitude: 106.8470 },
+      { latitude: -6.6860, longitude: 106.8500 },
+      { latitude: -6.6920, longitude: 106.8500 },
+      { latitude: -6.6920, longitude: 106.8470 }
+    ]
+  },
+  {
+    id: 'sawah',
+    name: 'Sawah / Pertanian',
+    color: '#8bc34a',
+    fillColor: 'rgba(139, 195, 74, 0.25)',
+    coordinates: [
+      { latitude: -6.6910, longitude: 106.8420 },
+      { latitude: -6.6880, longitude: 106.8420 },
+      { latitude: -6.6880, longitude: 106.8460 },
+      { latitude: -6.6910, longitude: 106.8460 },
+      { latitude: -6.6910, longitude: 106.8420 }
+    ]
+  },
+  {
+    id: 'permukiman',
+    name: 'Permukiman / Jalan',
+    color: '#ff5252',
+    fillColor: 'rgba(244, 67, 54, 0.25)',
+    coordinates: [
+      { latitude: -6.6860, longitude: 106.8400 },
+      { latitude: -6.6840, longitude: 106.8400 },
+      { latitude: -6.6840, longitude: 106.8430 },
+      { latitude: -6.6860, longitude: 106.8430 },
+      { latitude: -6.6860, longitude: 106.8400 }
+    ]
+  },
+  {
+    id: 'perairan',
+    name: 'Perairan / Sungai',
+    color: '#2196f3',
+    fillColor: 'rgba(33, 150, 243, 0.25)',
+    coordinates: [
+      { latitude: -6.6920, longitude: 106.8380 },
+      { latitude: -6.6900, longitude: 106.8380 },
+      { latitude: -6.6900, longitude: 106.8410 },
+      { latitude: -6.6920, longitude: 106.8410 },
+      { latitude: -6.6920, longitude: 106.8380 }
+    ]
+  }
+];
+
 export default function GisScreen() {
   const [lahan, setLahan] = useState(null);
-  const [latestSensor, setLatestSensor] = useState(null);
+  const [bedengs, setBedengs] = useState([]);
+  const [selectedBedeng, setSelectedBedeng] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [sensorDetailsVisible, setSensorDetailsVisible] = useState(false);
-  const [loadingSensor, setLoadingSensor] = useState(false);
 
   const loadGisData = async () => {
-    setLoading(true);
-    const lahanResult = await getLahanProfile();
-    if (lahanResult.success) {
-      setLahan(lahanResult.data);
-    } else {
-      Alert.alert('Error', 'Gagal memuat profil GIS lahan dari database.');
+    if (!lahan) {
+      setLoading(true);
     }
-    setLoading(false);
+    try {
+      const [lahanResult, bedengResult] = await Promise.all([
+        getLahanProfile(),
+        getBedengList()
+      ]);
+
+      if (lahanResult.success && lahanResult.data) {
+        setLahan(lahanResult.data);
+      }
+      if (bedengResult.success && bedengResult.data) {
+        setBedengs(bedengResult.data);
+      }
+    } catch (err) {
+      console.warn('GIS loadGisData error:', err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const loadLatestSensorReading = async () => {
-    setLoadingSensor(true);
-    const sensorResult = await getLatestSensor();
-    if (sensorResult.success) {
-      setLatestSensor(sensorResult.data);
-      setSensorDetailsVisible(true);
-    } else {
-      Alert.alert('Error', 'Gagal memuat pembacaan sensor terbaru.');
-    }
-    setLoadingSensor(false);
+  const handleBedengPress = (bedeng) => {
+    setSelectedBedeng(bedeng);
+    setSensorDetailsVisible(true);
   };
 
   useEffect(() => {
@@ -54,17 +114,20 @@ export default function GisScreen() {
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadGisData();
-    if (sensorDetailsVisible) {
-      await loadLatestSensorReading();
+    if (sensorDetailsVisible && selectedBedeng) {
+      // Refresh selected bedeng data
+      const updated = bedengs.find(b => b.id === selectedBedeng.id);
+      if (updated) setSelectedBedeng(updated);
     }
     setRefreshing(false);
   };
 
   // Convert DB geometry coordinates back to MapView LatLng object coordinates
-  const getPolygonLatLngs = () => {
-    if (!lahan || !lahan.polygon_batas || !lahan.polygon_batas.coordinates) return [];
+  const getPolygonLatLngs = (polygonBatas) => {
+    const target = polygonBatas || (lahan && lahan.polygon_batas);
+    if (!target || !target.coordinates) return [];
     // DB stores coordinates as [ [ [lat1, lng1], [lat2, lng2], ... ] ]
-    const ring = lahan.polygon_batas.coordinates[0];
+    const ring = target.coordinates[0];
     return ring.map(pt => ({
       latitude: parseFloat(pt[0]),
       longitude: parseFloat(pt[1])
@@ -78,8 +141,8 @@ export default function GisScreen() {
         longitude: parseFloat(lahan.koordinat_center.coordinates[1])
       };
     }
-    // Default coordinate (Jakarta / Demplot Utama)
-    return { latitude: -6.2085, longitude: 106.8460 };
+    // Default coordinate (Desa Pancawati, Caringin, Bogor)
+    return { latitude: -6.6892, longitude: 106.8443 };
   };
 
   if (loading) {
@@ -91,8 +154,20 @@ export default function GisScreen() {
     );
   }
 
+  const getBedengColor = (latestSensor) => {
+    if (!latestSensor) return 'rgba(128, 128, 128, 0.35)'; // Gray - no data
+    
+    const isHumidityOptimal = latestSensor.kelembaban >= 65 && latestSensor.kelembaban <= 85;
+    const isPhOptimal = latestSensor.pH >= 6.0 && latestSensor.pH <= 7.2;
+
+    if (isHumidityOptimal && isPhOptimal) {
+      return 'rgba(46, 125, 50, 0.45)'; // Green - optimal
+    }
+    return 'rgba(198, 40, 40, 0.45)'; // Red - critical
+  };
+
   const center = getCenterLatLng();
-  const polygonPoints = getPolygonLatLngs();
+  const polygonPoints = getPolygonLatLngs(lahan ? lahan.polygon_batas : null);
 
   // SVG dimensions for Web view rendering
   const width = 300;
@@ -136,66 +211,140 @@ export default function GisScreen() {
       {/* Map visualizer container */}
       <View style={styles.mapContainer}>
         {Platform.OS === 'web' || !MapView ? (
-          // Web Mode Fallback: Interactive Cartesian SVG Radar
+          // Web Mode Fallback: Interactive Cartesian SVG Grid for 16 Bedengs
           <View style={styles.svgMapWrapper}>
             <View style={styles.gridOverlay}>
-              <Text style={styles.radarLabel}>POLYGON BOUNDARY GRID (WEB SIMULATOR)</Text>
+              <Text style={styles.radarLabel}>PETA TUTUPAN LAHAN DESA PANCAWATI (SIMULATOR)</Text>
               <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`} style={{ flex: 1 }}>
-                {/* Axis Grid lines */}
-                <line x1="0" y1="50" x2="300" y2="50" stroke="rgba(255,255,255,0.08)" strokeDasharray="5,5" />
-                <line x1="0" y1="100" x2="300" y2="100" stroke="rgba(255,255,255,0.08)" strokeDasharray="5,5" />
-                <line x1="0" y1="150" x2="300" y2="150" stroke="rgba(255,255,255,0.08)" strokeDasharray="5,5" />
-                <line x1="75" y1="0" x2="75" y2="200" stroke="rgba(255,255,255,0.08)" strokeDasharray="5,5" />
-                <line x1="150" y1="0" x2="150" y2="200" stroke="rgba(255,255,255,0.08)" strokeDasharray="5,5" />
-                <line x1="225" y1="0" x2="225" y2="200" stroke="rgba(255,255,255,0.08)" strokeDasharray="5,5" />
+                {/* Background Land Covers zones */}
+                {/* Permukiman (Top-Left) */}
+                <rect x="0" y="0" width="120" height="90" fill="rgba(244, 67, 54, 0.18)" rx="8" />
+                <text x="15" y="25" fill="#ff5252" fontSize="7" fontWeight="600">Permukiman</text>
 
-                {/* Bounds Polygon */}
-                <polygon
-                  points={svgPoints}
-                  fill="rgba(76, 175, 80, 0.18)"
-                  stroke={colors.primary}
-                  strokeWidth="3"
-                />
+                {/* Perairan (Bottom-Left) */}
+                <rect x="0" y="110" width="120" height="90" fill="rgba(33, 150, 243, 0.18)" rx="8" />
+                <text x="15" y="130" fill="#2196f3" fontSize="7" fontWeight="600">Perairan</text>
 
-                {/* Center marker pin pulse animation style */}
-                <circle cx={width/2} cy={height/2} r="10" fill="rgba(244, 67, 54, 0.25)" />
-                <circle cx={width/2} cy={height/2} r="5" fill="#f44336" />
+                {/* Hutan (Right) */}
+                <rect x="180" y="0" width="120" height="200" fill="rgba(46, 125, 50, 0.18)" rx="8" />
+                <text x="200" y="25" fill="#2e7d32" fontSize="7" fontWeight="600">Hutan</text>
+
+                {/* Sawah / Pertanian (Middle) */}
+                <rect x="125" y="0" width="50" height="200" fill="rgba(139, 195, 74, 0.15)" rx="8" />
+                <text x="130" y="25" fill="#8bc34a" fontSize="7" fontWeight="600">Sawah</text>
+
+                {/* 16 Bedeng cells in 4x4 grid (centered at middle sawah zone) */}
+                {Array.from({ length: 4 }).map((_, r) => (
+                  Array.from({ length: 4 }).map((_, c) => {
+                    const bedengNo = r * 4 + c + 1;
+                    const bedeng = bedengs.find(b => b.nomor_bedeng === bedengNo);
+                    const color = getBedengColor(bedeng?.latest_sensor);
+                    const cellWidth = 10;
+                    const cellHeight = 10;
+                    const x = 135 + c * 10;
+                    const y = 80 + r * 10;
+
+                    return (
+                      <g key={bedengNo} style={{ cursor: 'pointer' }} onClick={() => handleBedengPress(bedeng)}>
+                        <rect
+                          x={x}
+                          y={y}
+                          width={cellWidth - 1}
+                          height={cellHeight - 1}
+                          fill={color}
+                          stroke="rgba(255,255,255,0.6)"
+                          strokeWidth="0.8"
+                          rx="1"
+                        />
+                      </g>
+                    );
+                  })
+                ))}
               </svg>
             </View>
-            <TouchableOpacity style={styles.webMarkerOverlay} onPress={loadLatestSensorReading}>
-              <Text style={styles.webMarkerText}>📌 Sensor Demplot (Klik untuk Detail)</Text>
-            </TouchableOpacity>
+            
+            {/* Legend Overlay for Web */}
+            <View style={styles.legendCard}>
+              <Text style={styles.legendTitle}>Tutupan Lahan Pancawati</Text>
+              {LAND_COVERS.map((lc) => (
+                <View key={lc.id} style={styles.legendRow}>
+                  <View style={[styles.legendIndicator, { backgroundColor: lc.color }]} />
+                  <Text style={styles.legendText}>{lc.name}</Text>
+                </View>
+              ))}
+              <View style={styles.legendRow}>
+                <View style={[styles.legendIndicator, { backgroundColor: colors.primary }]} />
+                <Text style={styles.legendText}>Demplot (Bedeng 1-16)</Text>
+              </View>
+            </View>
           </View>
         ) : (
-          // Native Mode: Live react-native-maps implementation
-          <MapView
-            style={styles.map}
-            initialRegion={{
-              latitude: center.latitude,
-              longitude: center.longitude,
-              latitudeDelta: 0.002,
-              longitudeDelta: 0.002,
-            }}
-          >
-            {/* Boundaries Polygon */}
-            {polygonPoints.length > 0 && (
-              <Polygon
-                coordinates={polygonPoints}
-                strokeColor={colors.primary}
-                fillColor="rgba(76, 175, 80, 0.22)"
-                strokeWidth={3}
-              />
-            )}
+          // Native Mode: Live react-native-maps satellite mode with 16 Bedeng Polygons
+          <View style={{ flex: 1, position: 'relative' }}>
+            <MapView
+              style={styles.map}
+              mapType="hybrid"
+              initialRegion={{
+                latitude: -6.6854, // Desa Pancawati Center
+                longitude: 106.8425,
+                latitudeDelta: 0.015,
+                longitudeDelta: 0.015,
+              }}
+            >
+              {/* Land Cover Overlays */}
+              {LAND_COVERS.map((lc) => (
+                <Polygon
+                  key={lc.id}
+                  coordinates={lc.coordinates}
+                  strokeColor="rgba(255,255,255,0.3)"
+                  fillColor={lc.fillColor}
+                  strokeWidth={1}
+                />
+              ))}
 
-            {/* Sensor Marker Pin */}
-            <Marker
-              coordinate={center}
-              title="Sensor Demplot"
-              description="Klik untuk melihat data telemetry real-time"
-              onPress={loadLatestSensorReading}
-              pinColor="#f44336"
-            />
-          </MapView>
+              {/* Lahan Outer Boundary Outline */}
+              {polygonPoints.length > 0 && (
+                <Polygon
+                  coordinates={polygonPoints}
+                  strokeColor={colors.primary}
+                  fillColor="rgba(0,0,0,0)"
+                  strokeWidth={4.5}
+                />
+              )}
+
+              {/* 16 Bedeng Polygons */}
+              {bedengs.map((bedeng) => {
+                const coords = getPolygonLatLngs(bedeng.polygon_batas);
+                const color = getBedengColor(bedeng.latest_sensor);
+                return (
+                  <Polygon
+                    key={bedeng.id}
+                    coordinates={coords}
+                    strokeColor="rgba(255,255,255,0.6)"
+                    fillColor={color}
+                    strokeWidth={1.5}
+                    tappable={true}
+                    onPress={() => handleBedengPress(bedeng)}
+                  />
+                );
+              })}
+            </MapView>
+
+            {/* Legend Overlay for Mobile MapView */}
+            <View style={styles.legendCard}>
+              <Text style={styles.legendTitle}>Tutupan Lahan Pancawati</Text>
+              {LAND_COVERS.map((lc) => (
+                <View key={lc.id} style={styles.legendRow}>
+                  <View style={[styles.legendIndicator, { backgroundColor: lc.color }]} />
+                  <Text style={styles.legendText}>{lc.name}</Text>
+                </View>
+              ))}
+              <View style={styles.legendRow}>
+                <View style={[styles.legendIndicator, { backgroundColor: colors.primary }]} />
+                <Text style={styles.legendText}>Demplot (Bedeng 1-16)</Text>
+              </View>
+            </View>
+          </View>
         )}
       </View>
 
@@ -222,43 +371,32 @@ export default function GisScreen() {
       </View>
 
       {/* Sensor Telemetry Panel Details */}
-      {loadingSensor ? (
-        <View style={[styles.card, styles.sensorLoader]}>
-          <ActivityIndicator size="small" color={colors.primary} />
-          <Text style={styles.sensorLoaderText}>Membaca data sensor terbaru...</Text>
-        </View>
-      ) : sensorDetailsVisible && latestSensor ? (
+      {sensorDetailsVisible && selectedBedeng ? (
         <View style={styles.sensorDetailsCard}>
           <View style={styles.sensorHeader}>
-            <Text style={styles.sensorTitle}>Telemetri IoT Lahan Real-Time</Text>
+            <Text style={styles.sensorTitle}>Detail Telemetri Bedeng {selectedBedeng.nomor_bedeng}</Text>
             <TouchableOpacity onPress={() => setSensorDetailsVisible(false)}>
               <Text style={styles.closeBtn}>Tutup</Text>
             </TouchableOpacity>
           </View>
           <Text style={styles.sensorTimestamp}>
-            Pembaruan: {new Date(latestSensor.timestamp).toLocaleString('id-ID')}
+            Pembaruan: {selectedBedeng.latest_sensor && selectedBedeng.latest_sensor.timestamp && !isNaN(new Date(selectedBedeng.latest_sensor.timestamp).getTime())
+              ? new Date(selectedBedeng.latest_sensor.timestamp).toLocaleString('id-ID')
+              : 'Belum ada data'}
           </Text>
 
           <View style={styles.gridContainer}>
             <View style={styles.gridItem}>
               <Text style={styles.gridLabel}>Kelembaban</Text>
-              <Text style={styles.gridVal}>{parseFloat(latestSensor.kelembaban).toFixed(1)}%</Text>
+              <Text style={styles.gridVal}>
+                {selectedBedeng.latest_sensor ? `${parseFloat(selectedBedeng.latest_sensor.kelembaban).toFixed(1)}%` : '--'}
+              </Text>
             </View>
             <View style={styles.gridItem}>
               <Text style={styles.gridLabel}>pH Tanah</Text>
-              <Text style={styles.gridVal}>{parseFloat(latestSensor.pH).toFixed(1)}</Text>
-            </View>
-            <View style={styles.gridItem}>
-              <Text style={styles.gridLabel}>Nitrogen (N)</Text>
-              <Text style={styles.gridVal}>{parseFloat(latestSensor.N).toFixed(1)} mg/kg</Text>
-            </View>
-            <View style={styles.gridItem}>
-              <Text style={styles.gridLabel}>Fosfor (P)</Text>
-              <Text style={styles.gridVal}>{parseFloat(latestSensor.P).toFixed(1)} mg/kg</Text>
-            </View>
-            <View style={styles.gridItem}>
-              <Text style={styles.gridLabel}>Kalium (K)</Text>
-              <Text style={styles.gridVal}>{parseFloat(latestSensor.K).toFixed(1)} mg/kg</Text>
+              <Text style={styles.gridVal}>
+                {selectedBedeng.latest_sensor ? `${parseFloat(selectedBedeng.latest_sensor.pH).toFixed(1)}` : '--'}
+              </Text>
             </View>
           </View>
         </View>
@@ -274,7 +412,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 20,
-    paddingTop: 40,
+    paddingTop: 30,
   },
   loadingContainer: {
     flex: 1,
@@ -291,7 +429,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     color: colors.text,
   },
@@ -449,5 +587,44 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textMuted,
     marginLeft: 10,
+  },
+  legendCard: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderRadius: 12,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    maxWidth: 160,
+  },
+  legendTitle: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  legendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 3,
+  },
+  legendIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 2,
+    marginRight: 5,
+  },
+  legendText: {
+    fontSize: 8,
+    fontWeight: '600',
+    color: colors.text,
   },
 });

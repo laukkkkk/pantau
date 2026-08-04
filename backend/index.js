@@ -7,7 +7,7 @@ const healthRouter = require('./routes/health');
 const errorHandler = require('./middlewares/errorHandler');
 
 // Load environment variables
-require('dotenv').config();
+require('dotenv').config({ override: true });
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -17,6 +17,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routing
 app.use('/api', healthRouter);
@@ -27,6 +28,9 @@ app.use('/api', require('./routes/laporan'));
 app.use('/api', require('./routes/lahan'));
 app.use('/api', require('./routes/rekomendasi'));
 app.use('/api', require('./routes/jadwal'));
+app.use('/api', require('./routes/deteksi'));
+app.use('/api', require('./routes/dashboard'));
+app.use('/api', require('./routes/deviceAssignment'));
 
 // Global Error Handler
 app.use(errorHandler);
@@ -34,15 +38,18 @@ app.use(errorHandler);
 // Database connection test & server start
 const startServer = async () => {
   try {
-    await db.sequelize.authenticate();
-    console.log('✓ Database connection has been established successfully.');
+    // Test connectivity to Firestore
+    await db.db.collection('profil_lahan').doc('1').get();
+    console.log('✓ Firestore connection has been established successfully.');
+    
+    // (Firestore connection is verified)
   } catch (error) {
-    console.warn('⚠️ Warning: Database connection failed. Please check your DB_URL in .env.');
+    console.warn('⚠️ Warning: Firestore connection failed. Please check your Firebase credentials.');
     console.error('Connection details:', error.message);
   }
 
-  app.listen(PORT, () => {
-    console.log(`✓ Express server is running on port ${PORT}`);
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`✓ Express server is running on port ${PORT} (0.0.0.0)`);
     console.log(`✓ Health check endpoint available at http://localhost:${PORT}/api/health`);
   });
 };

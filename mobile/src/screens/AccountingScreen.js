@@ -1,20 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, Linking, RefreshControl } from 'react-native';
-import { getSiklusList, getBiayaList, createBiaya, updateBiaya, deleteBiaya, getLaporan, calculateLaporan, getPdfExportUrl } from '../services/api';
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, Text, View, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, Linking, RefreshControl, Modal } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { getSiklusList, updateSiklus, getBiayaList, createBiaya, updateBiaya, deleteBiaya, getLaporan, calculateLaporan, getPdfExportUrl } from '../services/api';
 import { colors } from '../theme/colors';
 
+const CATEGORIES = ['Benih', 'Pupuk', 'Pestisida', 'Tenaga Kerja', 'Sewa Alat', 'Lainnya'];
+
 export default function AccountingScreen() {
+  const [activeTab, setActiveTab] = useState('buku'); // 'buku' | 'hpp' | 'bep' | 'labarugi'
   const [siklusList, setSiklusList] = useState([]);
   const [selectedSiklusId, setSelectedSiklusId] = useState(null);
   
   // Cost Form States
-  const [kategori, setKategori] = useState('');
+  const [isFormVisible, setIsFormVisible] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('Benih');
+  const [deskripsi, setDeskripsi] = useState('');
   const [jumlah, setJumlah] = useState('');
   const [tanggal, setTanggal] = useState(new Date().toISOString().split('T')[0]); // YYYY-MM-DD
   const [editingBiayaId, setEditingBiayaId] = useState(null);
 
-  // Profit/HPP Estimation States
-  const [hargaJualEstimasi, setHargaJualEstimasi] = useState('');
+  // Simulation Sliders / Preset Inputs
+  const [estimasiHasilPanen, setEstimasiHasilPanen] = useState(1000); // in kg
+  const [targetHargaJual, setTargetHargaJual] = useState(25000); // Rp/kg
 
   // Data Lists & Reports
   const [biayaList, setBiayaList] = useState([]);
@@ -25,14 +32,20 @@ export default function AccountingScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
 
+  const isCycleActive = (s) => {
+    if (!s || !s.status) return false;
+    const st = s.status.toString().toLowerCase();
+    return st === 'berjalan' || st === 'aktif';
+  };
+
   // Fetch cycles list on mount
   const initScreen = async () => {
     setLoading(true);
     const result = await getSiklusList();
     if (result.success && result.data.length > 0) {
       setSiklusList(result.data);
-      // Default select the first active cycle
-      const active = result.data.find(s => s.status === 'berjalan') || result.data[0];
+      // Default select the first active/running cycle, otherwise first available
+      const active = result.data.find(isCycleActive) || result.data[0];
       setSelectedSiklusId(active.id);
     }
     setLoading(false);
@@ -41,27 +54,79 @@ export default function AccountingScreen() {
   // Fetch costs and reports when selected cycle changes
   const fetchCycleData = async (siklusId) => {
     if (!siklusId) return;
-    const biayaResult = await getBiayaList(siklusId);
-    if (biayaResult.success) {
-      setBiayaList(biayaResult.data);
-    }
+    try {
+      const [biayaResult, laporanResult] = await Promise.all([
+        getBiayaList(siklusId),
+        getLaporan(siklusId)
+      ]);
 
-    const laporanResult = await getLaporan(siklusId);
-    if (laporanResult.success) {
-      setLaporan(laporanResult.data);
-      if (laporanResult.data && !hargaJualEstimasi) {
-        // Prefill estimated price if available
-        const estimasiPrice = (parseFloat(laporanResult.data.total_pendapatan) / parseFloat(laporanResult.data.hasil_panen)) || '';
-        setHargaJualEstimasi(estimasiPrice ? Math.round(estimasiPrice).toString() : '');
+      if (biayaResult.success) {
+        setBiayaList(biayaResult.data);
       }
-    } else {
-      setLaporan(null);
+
+      if (laporanResult.success && laporanResult.data) {
+        setLaporan(laporanResult.data);
+        
+        // Calculate estimated sell price from current report if present
+        const currentSiklus = siklusList.find(s => s.id === siklusId);
+        const yieldAmt = currentSiklus?.hasil_panen || 0;
+        if (yieldAmt > 0) {
+          setEstimasiHasilPanen(yieldAmt);
+        }
+        
+        const parsedPrice = yieldAmt > 0 ? Math.round(parseFloat(laporanResult.data.total_pendapatan) / yieldAmt) : 25000;
+        setTargetHargaJual(parsedPrice || 25000);
+      } else {
+        setLaporan(null);
+      }
+    } catch (err) {
+      console.warn('Accounting fetchCycleData error:', err.message);
     }
   };
 
-  useEffect(() => {
-    initScreen();
-  }, []);
+  // Auto-refresh cycle list every time the Accounting tab is focused
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+
+      const refreshSiklusList = async () => {
+        const result = await getSiklusList();
+        if (!isMounted) return;
+
+        if (result.success && Array.isArray(result.data)) {
+          const freshList = result.data;
+          setSiklusList(freshList);
+
+          if (freshList.length === 0) {
+            setSelectedSiklusId(null);
+            setBiayaList([]);
+            setLaporan(null);
+          } else {
+            setSelectedSiklusId((prevSelectedId) => {
+              const exists = freshList.some((s) => String(s.id) === String(prevSelectedId));
+              if (exists && prevSelectedId) {
+                return prevSelectedId;
+              }
+              const active = freshList.find(isCycleActive) || freshList[0];
+              return active ? active.id : null;
+            });
+          }
+        } else {
+          setSiklusList([]);
+          setSelectedSiklusId(null);
+          setBiayaList([]);
+          setLaporan(null);
+        }
+        setLoading(false);
+      };
+
+      refreshSiklusList();
+
+      return () => {
+        isMounted = false;
+      };
+    }, [])
+  );
 
   useEffect(() => {
     if (selectedSiklusId) {
@@ -80,14 +145,15 @@ export default function AccountingScreen() {
 
   // CRUD Costs Logic
   const handleSaveBiaya = async () => {
-    if (!kategori || !jumlah || !tanggal) {
+    if (!selectedCategory || !deskripsi || !jumlah || !tanggal) {
       Alert.alert('Gagal', 'Semua kolom form biaya wajib diisi.');
       return;
     }
 
     setActionLoading(true);
     const payload = {
-      kategori,
+      kategori: selectedCategory,
+      deskripsi,
       jumlah: parseFloat(jumlah),
       tanggal,
       siklus_id: selectedSiklusId
@@ -103,11 +169,13 @@ export default function AccountingScreen() {
     setActionLoading(false);
     if (res.success) {
       Alert.alert('Sukses', editingBiayaId ? 'Pengeluaran berhasil diubah.' : 'Pengeluaran berhasil dicatat.');
-      // Reset form
-      setKategori('');
+      // Reset form & hide modal
+      setSelectedCategory('Benih');
+      setDeskripsi('');
       setJumlah('');
       setTanggal(new Date().toISOString().split('T')[0]);
       setEditingBiayaId(null);
+      setIsFormVisible(false);
       // Reload costs
       fetchCycleData(selectedSiklusId);
     } else {
@@ -117,16 +185,20 @@ export default function AccountingScreen() {
 
   const handleEditClick = (biaya) => {
     setEditingBiayaId(biaya.id);
-    setKategori(biaya.kategori);
+    setSelectedCategory(biaya.kategori);
+    setDeskripsi(biaya.deskripsi || '');
     setJumlah(parseFloat(biaya.jumlah).toString());
     setTanggal(biaya.tanggal.split('T')[0]);
+    setIsFormVisible(true);
   };
 
   const handleCancelEdit = () => {
     setEditingBiayaId(null);
-    setKategori('');
+    setSelectedCategory('Benih');
+    setDeskripsi('');
     setJumlah('');
     setTanggal(new Date().toISOString().split('T')[0]);
+    setIsFormVisible(false);
   };
 
   const handleDeleteClick = (id) => {
@@ -153,30 +225,6 @@ export default function AccountingScreen() {
     );
   };
 
-  // Financial Calculations Trigger
-  const handleCalculate = async () => {
-    if (!hargaJualEstimasi) {
-      Alert.alert('Gagal', 'Harga jual estimasi per kg wajib diisi.');
-      return;
-    }
-
-    const currentSiklus = siklusList.find(s => s.id === selectedSiklusId);
-    if (!currentSiklus || !currentSiklus.hasil_panen) {
-      Alert.alert('Perhatian', 'Siklus tanam terpilih belum panen atau hasil panen belum tercatat (panen di-set 0 kg). HPP dihitung 0.');
-    }
-
-    setActionLoading(true);
-    const res = await calculateLaporan(selectedSiklusId, hargaJualEstimasi);
-    setActionLoading(false);
-    
-    if (res.success) {
-      Alert.alert('Sukses', 'Kalkulasi HPP & keuntungan berhasil disimpan.');
-      fetchCycleData(selectedSiklusId);
-    } else {
-      Alert.alert('Gagal', res.error || 'Gagal menghitung laporan.');
-    }
-  };
-
   // PDF Export Trigger
   const handleExportPdf = () => {
     if (!selectedSiklusId) return;
@@ -184,6 +232,23 @@ export default function AccountingScreen() {
     Linking.openURL(url).catch((err) => {
       Alert.alert('Gagal', 'Tidak bisa membuka url download PDF: ' + err.message);
     });
+  };
+
+  // Trigger backend report recalculation using local target sell price simulation value
+  const handleSaveSimulatedReport = async () => {
+    setActionLoading(true);
+    if (estimasiHasilPanen > 0) {
+      await updateSiklus(selectedSiklusId, { hasil_panen: parseFloat(estimasiHasilPanen) });
+    }
+    const res = await calculateLaporan(selectedSiklusId, targetHargaJual, estimasiHasilPanen);
+    setActionLoading(false);
+    
+    if (res.success) {
+      Alert.alert('Sukses', 'Kalkulasi HPP & keuntungan berhasil disimpan ke database.');
+      fetchCycleData(selectedSiklusId);
+    } else {
+      Alert.alert('Gagal', res.error || 'Gagal menyimpan laporan.');
+    }
   };
 
   const getActiveSiklus = () => {
@@ -202,6 +267,48 @@ export default function AccountingScreen() {
   const selectedSiklus = getActiveSiklus();
   const totalBiayaSum = biayaList.reduce((sum, item) => sum + parseFloat(item.jumlah), 0);
 
+  // Group allocations by category
+  const categoryAllocations = CATEGORIES.map(cat => {
+    const total = biayaList
+      .filter(b => b.kategori === cat)
+      .reduce((sum, b) => sum + parseFloat(b.jumlah), 0);
+    const percentage = totalBiayaSum > 0 ? (total / totalBiayaSum) * 100 : 0;
+    return { category: cat, total, percentage };
+  });
+
+  // Dynamic Math for Sliders
+  const simulatedHPP = estimasiHasilPanen > 0 ? totalBiayaSum / estimasiHasilPanen : 0;
+  const bepVolume = targetHargaJual > 0 ? totalBiayaSum / targetHargaJual : 0;
+  const bepOmset = bepVolume * targetHargaJual;
+  const projectedRevenue = estimasiHasilPanen * targetHargaJual;
+  const projectedNetIncome = projectedRevenue - totalBiayaSum;
+
+  const safetyRatio = bepVolume > 0 ? (estimasiHasilPanen / bepVolume) : 0;
+  let safetyStatus = 'Bahaya';
+  let safetyColor = colors.danger;
+  let safetyProgress = 0.2;
+  if (safetyRatio >= 1.5) {
+    safetyStatus = 'Aman';
+    safetyColor = colors.primary;
+    safetyProgress = 0.9;
+  } else if (safetyRatio >= 1.0) {
+    safetyStatus = 'Rentan';
+    safetyColor = '#ff9800'; // Orange
+    safetyProgress = 0.55;
+  }
+
+  // Auto generated summary text for profit/loss tab
+  const getNarrativeSummary = () => {
+    if (totalBiayaSum === 0) return 'Belum ada biaya produksi yang tercatat. Silakan tambah pengeluaran untuk memulai analisis laba rugi.';
+    if (estimasiHasilPanen === 0) return 'Estimasi hasil panen belum diisi di tab Kalkulator HPP. Silakan tentukan target hasil panen Anda.';
+    
+    if (projectedNetIncome >= 0) {
+      return `Usaha tani pada siklus ini diproyeksikan LAYAK TANAM. Dengan HPP sebesar Rp ${Math.round(simulatedHPP).toLocaleString('id-ID')}/kg and harga pasar Rp ${targetHargaJual.toLocaleString('id-ID')}/kg, Anda dapat menghasilkan margin keuntungan bersih sekitar Rp ${Math.round(projectedNetIncome).toLocaleString('id-ID')}. Titik BEP volume Anda adalah ${Math.round(bepVolume)} kg.`;
+    } else {
+      return `Peringatan: Proyeksi menunjukkan potensi kerugian sebesar Rp ${Math.round(Math.abs(projectedNetIncome)).toLocaleString('id-ID')}. HPP Aktual Anda (Rp ${Math.round(simulatedHPP).toLocaleString('id-ID')}) melebihi target harga jual pasar (Rp ${targetHargaJual.toLocaleString('id-ID')}). Disarankan untuk menekan biaya operasional atau mencari saluran penjualan dengan harga lebih tinggi.`;
+    }
+  };
+
   return (
     <ScrollView 
       style={styles.container} 
@@ -212,14 +319,14 @@ export default function AccountingScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Modul Akunting</Text>
-        <Text style={styles.subtitle}>Kelola pengeluaran operasional dan pantau kalkulasi HPP.</Text>
+        <Text style={styles.title}>Buku Keuangan</Text>
+        <Text style={styles.subtitle}>Kelola keuangan demplot secara modern, taksir HPP & titik impas BEP.</Text>
       </View>
 
-      {/* Cycle Selector Dropdown */}
+      {/* Cycle Selector Capsule */}
       <View style={styles.selectorWrapper}>
         <Text style={styles.inputLabel}>Pilih Siklus Tanam:</Text>
-        <View style={styles.cyclesContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cyclesScroll}>
           {siklusList.map((s) => (
             <TouchableOpacity
               key={s.id}
@@ -227,148 +334,378 @@ export default function AccountingScreen() {
               onPress={() => setSelectedSiklusId(s.id)}
             >
               <Text style={[styles.cycleBtnText, selectedSiklusId === s.id && styles.activeCycleBtnText]}>
-                {s.nama} ({s.status === 'selesai' ? 'Selesai' : 'Aktif'})
+                {s.nama} ({isCycleActive(s) ? 'Berjalan' : 'Selesai'})
               </Text>
             </TouchableOpacity>
           ))}
-        </View>
+        </ScrollView>
       </View>
 
-      {/* Primary Financial Projections (HPP / Profit / Earnings) */}
-      <View style={styles.projectionCard}>
-        <Text style={styles.projHeader}>Rangkuman Keuangan</Text>
-        <View style={styles.projRow}>
-          <Text style={styles.projLabel}>Total Biaya Operasional</Text>
-          <Text style={styles.projVal}>Rp {totalBiayaSum.toLocaleString('id-ID')}</Text>
-        </View>
-        <View style={styles.projRow}>
-          <Text style={styles.projLabel}>Hasil Panen</Text>
-          <Text style={styles.projVal}>{selectedSiklus?.hasil_panen ? `${selectedSiklus.hasil_panen} kg` : 'Belum Panen'}</Text>
-        </View>
-        <View style={styles.projDivider} />
-        <View style={styles.projRow}>
-          <Text style={styles.projLabelBold}>HPP / Kilogram (kg)</Text>
-          <Text style={styles.projValBold}>
-            {laporan ? `Rp ${Math.round(parseFloat(laporan.hpp)).toLocaleString('id-ID')}` : 'Rp --'}
-          </Text>
-        </View>
-        <View style={styles.projRow}>
-          <Text style={styles.projLabelBold}>Estimasi Keuntungan</Text>
-          <Text style={[styles.projValBold, { color: laporan?.keuntungan >= 0 ? colors.success : colors.danger }]}>
-            {laporan ? `Rp ${Math.round(parseFloat(laporan.keuntungan)).toLocaleString('id-ID')}` : 'Rp --'}
-          </Text>
-        </View>
+      {/* Main Premium Tab bar */}
+      <View style={styles.tabBar}>
+        {['buku', 'hpp', 'bep', 'labarugi'].map((tab) => {
+          let label = 'Buku';
+          if (tab === 'hpp') label = 'Kalkulator HPP';
+          if (tab === 'bep') label = 'Proyeksi & BEP';
+          if (tab === 'labarugi') label = 'Laba Rugi';
+
+          return (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.tabItem, activeTab === tab && styles.activeTabItem]}
+              onPress={() => setActiveTab(tab)}
+            >
+              <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
+                {label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
-      {/* Action Buttons for PDF Export */}
-      {laporan && (
-        <TouchableOpacity style={styles.exportPdfBtn} onPress={handleExportPdf}>
-          <Text style={styles.exportPdfBtnText}>📄 Unduh Laporan PDF Resmi</Text>
-        </TouchableOpacity>
-      )}
+      {/* TAB 1: BUKU KEUANGAN */}
+      {activeTab === 'buku' && (
+        <View>
+          {/* Ringkasan Cards Grid */}
+          <View style={styles.grid}>
+            <View style={styles.gridCard}>
+              <Text style={styles.gridLabel}>Total Biaya</Text>
+              <Text style={[styles.gridValue, { color: colors.text }]}>
+                Rp {totalBiayaSum.toLocaleString('id-ID')}
+              </Text>
+            </View>
+            <View style={styles.gridCard}>
+              <Text style={styles.gridLabel}>Laba Rugi Proyeksi</Text>
+              <Text style={[styles.gridValue, { color: projectedNetIncome >= 0 ? colors.primary : colors.danger }]}>
+                Rp {Math.round(projectedNetIncome).toLocaleString('id-ID')}
+              </Text>
+            </View>
+          </View>
 
-      {/* Calculator Section */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Kalkulator Proyeksi HPP</Text>
-        <Text style={styles.cardDesc}>Masukkan estimasi harga jual per kg untuk menghitung HPP & proyeksi laba bersih demplot.</Text>
-        
-        <View style={styles.formGroup}>
-          <Text style={styles.inputLabel}>Estimasi Harga Jual (Rp/kg)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Contoh: 6500"
-            placeholderTextColor={colors.textMuted}
-            keyboardType="numeric"
-            value={hargaJualEstimasi}
-            onChangeText={setHargaJualEstimasi}
-          />
-        </View>
+          {/* Allocation Progress Bars */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Alokasi Modal Operasional</Text>
+            <Text style={styles.cardDesc}>Breakdown alokasi anggaran belanja tani saat ini per kategori.</Text>
+            
+            {categoryAllocations.map(item => (
+              <View key={item.category} style={styles.allocationRow}>
+                <View style={styles.allocationHeader}>
+                  <Text style={styles.allocationName}>{item.category}</Text>
+                  <Text style={styles.allocationAmount}>
+                    Rp {item.total.toLocaleString('id-ID')} ({item.percentage.toFixed(1)}%)
+                  </Text>
+                </View>
+                <View style={styles.progressContainer}>
+                  <View style={[styles.progressBar, { width: `${Math.max(item.percentage, 2)}%`, backgroundColor: colors.primary }]} />
+                </View>
+              </View>
+            ))}
+          </View>
 
-        <TouchableOpacity style={styles.submitBtn} onPress={handleCalculate} disabled={actionLoading}>
-          <Text style={styles.submitBtnText}>Hitung & Simpan Laporan</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Cost Entry Form */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>{editingBiayaId ? 'Edit Catatan Biaya' : 'Catat Biaya Produksi Baru'}</Text>
-        
-        <View style={styles.formGroup}>
-          <Text style={styles.inputLabel}>Kategori / Rincian Pengeluaran</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Contoh: Pupuk NPK Phonska, Upah Harian"
-            placeholderTextColor={colors.textMuted}
-            value={kategori}
-            onChangeText={setKategori}
-          />
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={styles.inputLabel}>Jumlah Pengeluaran (Rp)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Contoh: 150000"
-            placeholderTextColor={colors.textMuted}
-            keyboardType="numeric"
-            value={jumlah}
-            onChangeText={setJumlah}
-          />
-        </View>
-
-        <View style={styles.formGroup}>
-          <Text style={styles.inputLabel}>Tanggal Pengeluaran (YYYY-MM-DD)</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Contoh: 2026-07-15"
-            placeholderTextColor={colors.textMuted}
-            value={tanggal}
-            onChangeText={setTanggal}
-          />
-        </View>
-
-        <View style={styles.btnRow}>
-          <TouchableOpacity 
-            style={[styles.submitBtn, { flex: 1, marginRight: editingBiayaId ? 10 : 0 }]} 
-            onPress={handleSaveBiaya} 
-            disabled={actionLoading}
-          >
-            <Text style={styles.submitBtnText}>{editingBiayaId ? 'Update' : 'Simpan Transaksi'}</Text>
+          {/* Action Row */}
+          <TouchableOpacity style={styles.addCostBtn} onPress={() => { setEditingBiayaId(null); setIsFormVisible(true); }}>
+            <Text style={styles.addCostBtnText}>➕ Catat Pengeluaran Baru</Text>
           </TouchableOpacity>
 
-          {editingBiayaId && (
-            <TouchableOpacity style={styles.cancelBtn} onPress={handleCancelEdit} disabled={actionLoading}>
-              <Text style={styles.cancelBtnText}>Batal</Text>
-            </TouchableOpacity>
+          {/* Cost History */}
+          <Text style={styles.sectionTitle}>Riwayat Transaksi Biaya</Text>
+          {biayaList.length > 0 ? (
+            biayaList.map((biaya) => (
+              <View key={biaya.id} style={styles.costItemCard}>
+                <View style={styles.costDetails}>
+                  <Text style={styles.costCategory}>{biaya.kategori}</Text>
+                  <Text style={styles.costDesc}>{biaya.deskripsi || '-'}</Text>
+                  <Text style={styles.costDate}>{new Date(biaya.tanggal).toLocaleDateString('id-ID')}</Text>
+                </View>
+                <View style={styles.costActionWrapper}>
+                  <Text style={styles.costAmount}>Rp {parseFloat(biaya.jumlah).toLocaleString('id-ID')}</Text>
+                  <View style={styles.costActionBtnRow}>
+                    <TouchableOpacity style={styles.editBtn} onPress={() => handleEditClick(biaya)}>
+                      <Text style={styles.actionBtnText}>Ubah</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteClick(biaya.id)}>
+                      <Text style={styles.actionBtnText}>Hapus</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.noDataText}>Belum ada riwayat pengeluaran untuk siklus tanam ini.</Text>
           )}
         </View>
-      </View>
+      )}
 
-      {/* Costs List Grid */}
-      <Text style={styles.sectionTitle}>Riwayat Biaya Produksi</Text>
-      {biayaList.length > 0 ? (
-        biayaList.map((biaya) => (
-          <View key={biaya.id} style={styles.costItemCard}>
-            <View style={styles.costDetails}>
-              <Text style={styles.costCategory}>{biaya.kategori}</Text>
-              <Text style={styles.costDate}>{new Date(biaya.tanggal).toLocaleDateString('id-ID')}</Text>
+      {/* TAB 2: KALKULATOR HPP */}
+      {activeTab === 'hpp' && (
+        <View>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Kalkulasi Harga Pokok Produksi (HPP)</Text>
+            <Text style={styles.cardDesc}>Tentukan estimasi total panen untuk membagi seluruh total modal menjadi HPP per kg.</Text>
+            
+            <View style={styles.hppResultContainer}>
+              <Text style={styles.hppLargeVal}>Rp {Math.round(simulatedHPP).toLocaleString('id-ID')} <Text style={{ fontSize: 14, color: colors.textMuted }}>/ kg</Text></Text>
+              <Text style={styles.hppFormula}>Rumus: Total Modal (Rp {totalBiayaSum.toLocaleString('id-ID')}) ÷ Hasil Panen ({estimasiHasilPanen} kg)</Text>
             </View>
-            <View style={styles.costActionWrapper}>
-              <Text style={styles.costAmount}>Rp {parseFloat(biaya.jumlah).toLocaleString('id-ID')}</Text>
-              <View style={styles.costActionBtnRow}>
-                <TouchableOpacity style={styles.editBtn} onPress={() => handleEditClick(biaya)}>
-                  <Text style={styles.actionBtnText}>Ubah</Text>
+
+            {/* Slider Inputs for Target Harvest Weight */}
+            <View style={styles.formGroup}>
+              <Text style={styles.inputLabel}>Estimasi Hasil Panen Total (kg):</Text>
+              <View style={styles.sliderControlRow}>
+                <TouchableOpacity style={styles.circleStepBtn} onPress={() => setEstimasiHasilPanen(Math.max(100, estimasiHasilPanen - 100))}>
+                  <Text style={styles.stepBtnText}>-</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteClick(biaya.id)}>
-                  <Text style={styles.actionBtnText}>Hapus</Text>
+                <TextInput
+                  style={styles.numericValueInput}
+                  keyboardType="numeric"
+                  value={estimasiHasilPanen.toString()}
+                  onChangeText={(val) => setEstimasiHasilPanen(parseInt(val) || 0)}
+                />
+                <TouchableOpacity style={styles.circleStepBtn} onPress={() => setEstimasiHasilPanen(estimasiHasilPanen + 100)}>
+                  <Text style={styles.stepBtnText}>+</Text>
                 </TouchableOpacity>
+              </View>
+
+              {/* Preset buttons */}
+              <View style={styles.presetRow}>
+                {[500, 1000, 2000, 3000, 5000].map(preset => (
+                  <TouchableOpacity key={preset} style={styles.presetBtn} onPress={() => setEstimasiHasilPanen(preset)}>
+                    <Text style={styles.presetBtnText}>{preset} kg</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
             </View>
           </View>
-        ))
-      ) : (
-        <Text style={styles.noDataText}>Belum ada riwayat pengeluaran untuk siklus tanam ini.</Text>
+
+          {/* Pricing Margin Analysis */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Analisis Titik Harga & Keuntungan</Text>
+            <Text style={styles.cardDesc}>Prediksi keuntungan bersih berdasarkan variasi harga jual pasar saat panen.</Text>
+
+            {[15000, 25000, 35000].map((pricePoint) => {
+              const diff = pricePoint - simulatedHPP;
+              const revenue = pricePoint * estimasiHasilPanen;
+              const netProfit = revenue - totalBiayaSum;
+              const profitLabel = netProfit >= 0 ? 'Potensi Untung' : 'Potensi Rugi';
+
+              return (
+                <View key={pricePoint} style={styles.pricePointCard}>
+                  <View>
+                    <Text style={styles.pricePointTitle}>Harga Jual: Rp {pricePoint.toLocaleString('id-ID')} / kg</Text>
+                    <Text style={styles.pricePointSubtitle}>
+                      {profitLabel}: Rp {Math.round(netProfit).toLocaleString('id-ID')}
+                    </Text>
+                  </View>
+                  <View style={[styles.pricePointBadge, { backgroundColor: netProfit >= 0 ? 'rgba(46, 125, 50, 0.08)' : 'rgba(198, 40, 40, 0.08)' }]}>
+                    <Text style={{ fontSize: 11, fontWeight: 'bold', color: netProfit >= 0 ? colors.primary : colors.danger }}>
+                      {netProfit >= 0 ? `Margin +Rp ${Math.round(diff).toLocaleString('id-ID')}/kg` : `Defisit Rp ${Math.round(Math.abs(diff)).toLocaleString('id-ID')}/kg`}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </View>
       )}
+
+      {/* TAB 3: PROYEKSI & BEP */}
+      {activeTab === 'bep' && (
+        <View>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Simulasi Titik Impas (BEP)</Text>
+            <Text style={styles.cardDesc}>Tentukan target harga jual pasar per kg untuk memantau batas volume pengembalian modal.</Text>
+
+            <View style={styles.bepGrid}>
+              <View style={styles.bepBox}>
+                <Text style={styles.bepLabel}>BEP Volume (Batas kg)</Text>
+                <Text style={styles.bepVal}>{bepVolume.toFixed(1)} kg</Text>
+                <Text style={styles.bepDesc}>Harus terjual agar balik modal</Text>
+              </View>
+              <View style={styles.bepBox}>
+                <Text style={styles.bepLabel}>BEP Omset (Rupiah)</Text>
+                <Text style={styles.bepVal}>Rp {Math.round(bepOmset).toLocaleString('id-ID')}</Text>
+                <Text style={styles.bepDesc}>Target omset impas tani</Text>
+              </View>
+            </View>
+
+            {/* Slider Inputs for Sell Price Target */}
+            <View style={styles.formGroup}>
+              <Text style={styles.inputLabel}>Target Harga Jual Pasar (Rp/kg):</Text>
+              <View style={styles.sliderControlRow}>
+                <TouchableOpacity style={styles.circleStepBtn} onPress={() => setTargetHargaJual(Math.max(1000, targetHargaJual - 1000))}>
+                  <Text style={styles.stepBtnText}>-</Text>
+                </TouchableOpacity>
+                <TextInput
+                  style={styles.numericValueInput}
+                  keyboardType="numeric"
+                  value={targetHargaJual.toString()}
+                  onChangeText={(val) => setTargetHargaJual(parseInt(val) || 0)}
+                />
+                <TouchableOpacity style={styles.circleStepBtn} onPress={() => setTargetHargaJual(targetHargaJual + 1000)}>
+                  <Text style={styles.stepBtnText}>+</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Preset buttons */}
+              <View style={styles.presetRow}>
+                {[10000, 15000, 20000, 25000, 35000].map(preset => (
+                  <TouchableOpacity key={preset} style={styles.presetBtn} onPress={() => setTargetHargaJual(preset)}>
+                    <Text style={styles.presetBtnText}>Rp {preset.toLocaleString('id-ID')}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
+
+          {/* Safety margin indicator */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Rasio Keamanan Hasil Panen</Text>
+            <Text style={styles.cardDesc}>Menilai risiko gagal panen terhadap batas minimum modal balik.</Text>
+
+            <View style={styles.safetyHeader}>
+              <Text style={styles.safetyLabel}>Rasio Keamanan: {safetyRatio.toFixed(2)}x lipat</Text>
+              <Text style={[styles.safetyStatusText, { color: safetyColor }]}>{safetyStatus.toUpperCase()}</Text>
+            </View>
+
+            <View style={styles.progressContainer}>
+              <View style={[styles.progressBar, { width: `${safetyProgress * 100}%`, backgroundColor: safetyColor }]} />
+            </View>
+            <Text style={styles.safetyInstructions}>
+              {safetyStatus === 'Aman' && '✓ Target panen Anda aman jauh di atas garis balik modal BEP.'}
+              {safetyStatus === 'Rentan' && '⚠️ Target panen mepet dengan BEP. Hati-hati risiko hama & cuaca.'}
+              {safetyStatus === 'Bahaya' && '❌ Bahaya! Estimasi panen Anda saat ini di bawah garis balik modal BEP.'}
+            </Text>
+          </View>
+
+          {/* Save Calculations CTA */}
+          <TouchableOpacity style={styles.saveCalcBtn} onPress={handleSaveSimulatedReport} disabled={actionLoading}>
+            <Text style={styles.saveCalcBtnText}>💾 Terapkan Proyeksi ke Database</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* TAB 4: LAPORAN LABA RUGI */}
+      {activeTab === 'labarugi' && (
+        <View>
+          {/* Statement Sheet Card */}
+          <View style={styles.card}>
+            <Text style={styles.statementTitle}>Laporan Laba Rugi Proyeksi</Text>
+            <Text style={styles.statementSubtitle}>Siklus: {selectedSiklus?.nama || 'Demplot Utama'}</Text>
+            <View style={styles.statementDivider} />
+
+            <View style={styles.statementRow}>
+              <Text style={styles.statementLabelBold}>PENDAPATAN</Text>
+            </View>
+            <View style={styles.statementRowSub}>
+              <Text style={styles.statementLabel}>Hasil Penjualan Panen ({estimasiHasilPanen} kg × Rp {targetHargaJual.toLocaleString('id-ID')})</Text>
+              <Text style={styles.statementVal}>Rp {projectedRevenue.toLocaleString('id-ID')}</Text>
+            </View>
+            <View style={[styles.statementRow, { marginTop: 10 }]}>
+              <Text style={styles.statementLabelBold}>BEBAN OPERASIONAL</Text>
+            </View>
+
+            {categoryAllocations.map(item => (
+              <View key={item.category} style={styles.statementRowSub}>
+                <Text style={styles.statementLabel}>Beban {item.category}</Text>
+                <Text style={styles.statementVal}>Rp {item.total.toLocaleString('id-ID')}</Text>
+              </View>
+            ))}
+
+            <View style={styles.statementRowSubBold}>
+              <Text style={styles.statementLabelBold}>Total Beban Operasional</Text>
+              <Text style={styles.statementValBold}>Rp {totalBiayaSum.toLocaleString('id-ID')}</Text>
+            </View>
+
+            <View style={styles.statementDoubleDivider} />
+
+            <View style={styles.statementRowNet}>
+              <Text style={styles.statementNetTitle}>LABA BERSIH (PROYEKSI)</Text>
+              <Text style={[styles.statementNetVal, { color: projectedNetIncome >= 0 ? colors.primary : colors.danger }]}>
+                Rp {Math.round(projectedNetIncome).toLocaleString('id-ID')}
+              </Text>
+            </View>
+          </View>
+
+          {/* Narrative Autogenerated Analysis */}
+          <View style={styles.narrativeCard}>
+            <Text style={styles.narrativeTitle}>📊 Analisis Buku Keuangan</Text>
+            <Text style={styles.narrativeText}>{getNarrativeSummary()}</Text>
+          </View>
+
+          {/* Export PDF Button */}
+          <TouchableOpacity style={styles.exportPdfBtnLarge} onPress={handleExportPdf}>
+            <Text style={styles.exportPdfBtnTextLarge}>📄 Export Laporan PDF Resmi</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* COST MODAL FORM */}
+      <Modal visible={isFormVisible} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{editingBiayaId ? 'Edit Catatan Biaya' : 'Catat Biaya Produksi Baru'}</Text>
+            
+            {/* Category selection chip group */}
+            <Text style={styles.inputLabel}>Pilih Kategori:</Text>
+            <View style={styles.chipGroup}>
+              {CATEGORIES.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[styles.chipBtn, selectedCategory === cat && styles.activeChipBtn]}
+                  onPress={() => setSelectedCategory(cat)}
+                >
+                  <Text style={[styles.chipText, selectedCategory === cat && styles.activeChipText]}>
+                    {cat}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.inputLabel}>Deskripsi / Nama Rincian Pengeluaran</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Contoh: Pupuk Urea 50kg, Upah Harian Penyiangan"
+                placeholderTextColor={colors.textMuted}
+                value={deskripsi}
+                onChangeText={setDeskripsi}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.inputLabel}>Jumlah Pengeluaran (Rp)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Contoh: 150000"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="numeric"
+                value={jumlah}
+                onChangeText={setJumlah}
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.inputLabel}>Tanggal Pengeluaran (YYYY-MM-DD)</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Contoh: 2026-07-15"
+                placeholderTextColor={colors.textMuted}
+                value={tanggal}
+                onChangeText={setTanggal}
+              />
+            </View>
+
+            <View style={styles.btnRow}>
+              <TouchableOpacity style={[styles.submitBtn, { flex: 1, marginRight: 10 }]} onPress={handleSaveBiaya} disabled={actionLoading}>
+                <Text style={styles.submitBtnText}>{editingBiayaId ? 'Update' : 'Simpan Transaksi'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.cancelBtn} onPress={handleCancelEdit}>
+                <Text style={styles.cancelBtnText}>Batal</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -380,7 +717,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 20,
-    paddingTop: 40,
+    paddingTop: 30,
   },
   loadingContainer: {
     flex: 1,
@@ -397,7 +734,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     color: colors.text,
   },
@@ -405,13 +742,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textMuted,
     marginTop: 5,
+    lineHeight: 20,
   },
   selectorWrapper: {
     marginBottom: 20,
   },
-  cyclesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  cyclesScroll: {
     marginTop: 8,
   },
   cycleBtn: {
@@ -421,8 +757,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 15,
     paddingVertical: 8,
-    marginRight: 10,
-    marginBottom: 10,
+    marginRight: 8,
   },
   activeCycleBtn: {
     backgroundColor: colors.primary,
@@ -436,65 +771,56 @@ const styles = StyleSheet.create({
   activeCycleBtnText: {
     color: colors.card,
   },
-  projectionCard: {
-    backgroundColor: colors.primaryDark,
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 15,
-    shadowColor: colors.text,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  projHeader: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: colors.card,
-    marginBottom: 15,
-  },
-  projRow: {
+  tabBar: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
-  projLabel: {
-    fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.75)',
-  },
-  projVal: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.card,
-  },
-  projDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    marginVertical: 12,
-  },
-  projLabelBold: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: colors.card,
-  },
-  projValBold: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: colors.card,
-  },
-  exportPdfBtn: {
     backgroundColor: colors.card,
-    borderWidth: 1.5,
-    borderColor: colors.primary,
+    borderWidth: 1,
+    borderColor: colors.border,
     borderRadius: 16,
-    paddingVertical: 14,
-    alignItems: 'center',
+    overflow: 'hidden',
     marginBottom: 20,
   },
-  exportPdfBtnText: {
-    fontSize: 14,
-    fontWeight: 'bold',
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  activeTabItem: {
+    backgroundColor: 'rgba(46, 125, 50, 0.08)',
+  },
+  tabText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
+  activeTabText: {
     color: colors.primary,
+    fontWeight: 'bold',
+  },
+  grid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  gridCard: {
+    flex: 1,
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginHorizontal: 4,
+  },
+  gridLabel: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginBottom: 5,
+  },
+  gridValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   card: {
     backgroundColor: colors.card,
@@ -508,67 +834,63 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: colors.text,
-    marginBottom: 5,
+    marginBottom: 4,
   },
   cardDesc: {
     fontSize: 12,
     color: colors.textMuted,
+    marginBottom: 15,
     lineHeight: 18,
-    marginBottom: 15,
   },
-  formGroup: {
-    marginBottom: 15,
+  allocationRow: {
+    marginBottom: 12,
   },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.text,
+  allocationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     marginBottom: 6,
   },
-  input: {
-    backgroundColor: 'rgba(0, 0, 0, 0.02)',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    fontSize: 14,
+  allocationName: {
+    fontSize: 13,
+    fontWeight: '600',
     color: colors.text,
   },
-  btnRow: {
-    flexDirection: 'row',
+  allocationAmount: {
+    fontSize: 12,
+    color: colors.textMuted,
   },
-  submitBtn: {
+  progressContainer: {
+    height: 6,
+    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  addCostBtn: {
     backgroundColor: colors.primary,
-    borderRadius: 12,
+    borderRadius: 16,
     paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 5,
+    marginBottom: 20,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  submitBtnText: {
+  addCostBtnText: {
     fontSize: 14,
     fontWeight: 'bold',
     color: colors.card,
-  },
-  cancelBtn: {
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
-    borderRadius: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    marginTop: 5,
-  },
-  cancelBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.text,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: colors.text,
     marginBottom: 12,
-    marginTop: 10,
   },
   costItemCard: {
     backgroundColor: colors.card,
@@ -588,10 +910,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 4,
+  },
+  costDesc: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginVertical: 2,
   },
   costDate: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.textMuted,
   },
   costActionWrapper: {
@@ -601,7 +927,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   costActionBtnRow: {
     flexDirection: 'row',
@@ -627,7 +953,369 @@ const styles = StyleSheet.create({
   noDataText: {
     fontSize: 13,
     color: colors.textMuted,
-    marginVertical: 10,
     textAlign: 'center',
+    marginVertical: 20,
+  },
+  hppResultContainer: {
+    backgroundColor: 'rgba(46, 125, 50, 0.06)',
+    borderRadius: 16,
+    padding: 18,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  hppLargeVal: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: colors.primary,
+  },
+  hppFormula: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 8,
+  },
+  sliderControlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 10,
+  },
+  circleStepBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0,0,0,0.03)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  stepBtnText: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  numericValueInput: {
+    flex: 1,
+    maxWidth: 150,
+    height: 48,
+    backgroundColor: 'rgba(0,0,0,0.015)',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginHorizontal: 15,
+  },
+  presetRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    marginTop: 10,
+  },
+  presetBtn: {
+    backgroundColor: 'rgba(0,0,0,0.02)',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    margin: 4,
+  },
+  presetBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  pricePointCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.01)',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  pricePointTitle: {
+    fontSize: 13,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  pricePointSubtitle: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  pricePointBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  bepGrid: {
+    flexDirection: 'row',
+    marginBottom: 20,
+  },
+  bepBox: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.01)',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 4,
+    alignItems: 'center',
+  },
+  bepLabel: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginBottom: 6,
+  },
+  bepVal: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  bepDesc: {
+    fontSize: 10,
+    color: colors.textMuted,
+    marginTop: 4,
+  },
+  safetyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  safetyLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  safetyStatusText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+  safetyInstructions: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 10,
+    lineHeight: 16,
+  },
+  saveCalcBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  saveCalcBtnText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: colors.card,
+  },
+  statementTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: colors.text,
+    textAlign: 'center',
+  },
+  statementSubtitle: {
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  statementDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: 15,
+  },
+  statementRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+  },
+  statementRowSub: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingLeft: 12,
+    marginBottom: 4,
+  },
+  statementRowSubBold: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingLeft: 12,
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderColor: colors.border,
+    paddingTop: 6,
+  },
+  statementLabel: {
+    fontSize: 12,
+    color: colors.text,
+  },
+  statementVal: {
+    fontSize: 12,
+    color: colors.text,
+  },
+  statementLabelBold: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  statementValBold: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  statementDoubleDivider: {
+    height: 3,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.textMuted,
+    marginVertical: 15,
+  },
+  statementRowNet: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  statementNetTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: colors.text,
+  },
+  statementNetVal: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  narrativeCard: {
+    backgroundColor: 'rgba(0,0,0,0.015)',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+  },
+  narrativeTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 6,
+  },
+  narrativeText: {
+    fontSize: 12,
+    color: colors.textMuted,
+    lineHeight: 18,
+  },
+  exportPdfBtnLarge: {
+    backgroundColor: colors.card,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  exportPdfBtnTextLarge: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: colors.primary,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: colors.card,
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginBottom: 15,
+  },
+  chipGroup: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 15,
+    marginTop: 6,
+  },
+  chipBtn: {
+    backgroundColor: 'rgba(0,0,0,0.02)',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  activeChipBtn: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  chipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  activeChipText: {
+    color: colors.card,
+    fontWeight: 'bold',
+  },
+  formGroup: {
+    marginBottom: 15,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  input: {
+    backgroundColor: 'rgba(0, 0, 0, 0.015)',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    fontSize: 14,
+    color: colors.text,
+    marginTop: 6,
+  },
+  btnRow: {
+    flexDirection: 'row',
+    marginTop: 10,
+  },
+  submitBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  submitBtnText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: colors.card,
+  },
+  cancelBtn: {
+    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.text,
   },
 });

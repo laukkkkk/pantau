@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   StyleSheet,
   View,
@@ -12,27 +12,35 @@ import {
   Platform,
   Alert
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
-import { colors } from '../theme/colors';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { colors, withAlpha } from '../theme/colors';
 import {
   getJadwalKegiatan,
   createJadwalKegiatan,
   updateJadwalKegiatan,
+  deleteJadwalKegiatan,
   getRekomendasiPupuk,
   createRekomendasiPupuk,
-  updateRekomendasiPupuk
+  updateRekomendasiPupuk,
+  deleteRekomendasiPupuk
 } from '../services/api';
 
 // Konfigurasi notifikasi jika di platform native
 if (Platform.OS !== 'web') {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
-  });
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+  } catch (err) {
+    console.warn('[Notifications] Gagal setNotificationHandler (Expo Go / SDK limitation):', err.message);
+  }
 }
 
 export default function KegiatanScreen() {
@@ -40,7 +48,7 @@ export default function KegiatanScreen() {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
-  // States untuk Jadwal
+  // States untuk Jadwal (hanya kategori Tani)
   const [jadwalList, setJadwalList] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [namaKegiatan, setNamaKegiatan] = useState('');
@@ -49,14 +57,28 @@ export default function KegiatanScreen() {
 
   // States untuk Rekomendasi
   const [rekomendasiList, setRekomendasiList] = useState([]);
+  const [selectedBedengId, setSelectedBedengId] = useState(1);
 
   // Setup permission & notifications
   useEffect(() => {
     async function requestPermission() {
       if (Platform.OS !== 'web') {
-        const { status } = await Notifications.requestPermissionsAsync();
-        if (status !== 'granted') {
-          console.log('Permission for local notifications not granted');
+        const isExpoGo =
+          Constants.executionEnvironment === ExecutionEnvironment?.StoreClient ||
+          Constants.appOwnership === 'expo';
+
+        if (isExpoGo) {
+          console.log('[Notifications] Berjalan di Expo Go: Permintaan izin notifikasi remote dilewati (keterbatasan SDK 53+).');
+          return;
+        }
+
+        try {
+          const { status } = await Notifications.requestPermissionsAsync();
+          if (status !== 'granted') {
+            console.log('Permission for local notifications not granted');
+          }
+        } catch (err) {
+          console.warn('[Notifications] Gagal meminta izin notifikasi:', err.message);
         }
       }
     }
@@ -65,17 +87,28 @@ export default function KegiatanScreen() {
   }, []);
 
   const fetchData = async () => {
-    setLoading(true);
+    const isCurrentListEmpty = activeTab === 'jadwal' ? jadwalList.length === 0 : rekomendasiList.length === 0;
+    if (isCurrentListEmpty) {
+      setLoading(true);
+    }
     try {
       if (activeTab === 'jadwal') {
-        const res = await getJadwalKegiatan();
-        if (res.success) setJadwalList(res.data);
+        const res = await getJadwalKegiatan('Tani');
+        if (res.success && Array.isArray(res.data)) {
+          setJadwalList(res.data);
+        } else if (jadwalList.length === 0) {
+          setJadwalList([]);
+        }
       } else {
         const res = await getRekomendasiPupuk();
-        if (res.success) setRekomendasiList(res.data);
+        if (res.success && Array.isArray(res.data)) {
+          setRekomendasiList(res.data);
+        } else if (rekomendasiList.length === 0) {
+          setRekomendasiList([]);
+        }
       }
     } catch (e) {
-      console.warn(e);
+      console.warn('Kegiatan fetchData error:', e.message);
     } finally {
       setLoading(false);
     }
@@ -85,7 +118,7 @@ export default function KegiatanScreen() {
     setRefreshing(true);
     try {
       if (activeTab === 'jadwal') {
-        const res = await getJadwalKegiatan();
+        const res = await getJadwalKegiatan('Tani');
         if (res.success) setJadwalList(res.data);
       } else {
         const res = await getRekomendasiPupuk();
@@ -98,9 +131,11 @@ export default function KegiatanScreen() {
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, [activeTab]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [activeTab])
+  );
 
   // Penjadwalan notifikasi H-1 sebelum kegiatan
   const scheduleNotification = async (title, dateStr) => {
@@ -139,7 +174,11 @@ export default function KegiatanScreen() {
 
       Alert.alert('Sukses Penjadwalan', `Berhasil mendaftarkan alarm pengingat. ${noteMsg}`);
     } catch (error) {
-      console.warn('Gagal menjadwalkan notifikasi:', error);
+      console.warn('Gagal menjadwalkan notifikasi (Expo Go/Native limitation):', error.message);
+      Alert.alert(
+        'Info Penjadwalan',
+        `Jadwal berhasil disimpan. (Catatan: Fitur notifikasi alarm fisik terbatas saat testing via Expo Go, tetapi akan berjalan di build APK produksi/Development Build).`
+      );
     }
   };
 
@@ -162,7 +201,8 @@ export default function KegiatanScreen() {
         nama_kegiatan: namaKegiatan,
         tanggal: `${tanggalKegiatan}T08:00:00.000Z`,
         status: 'BELUM_MULAI',
-        deskripsi: deskripsiKegiatan
+        deskripsi: deskripsiKegiatan,
+        kategori: 'Tani' // Selalu Tani — Ormawa dipisah dari tampilan petani
       };
 
       const res = await createJadwalKegiatan(payload);
@@ -200,9 +240,12 @@ export default function KegiatanScreen() {
   const handleHitungRekomendasi = async () => {
     setLoading(true);
     try {
-      const res = await createRekomendasiPupuk(); // Menggunakan sensor terakhir dari db
+      const res = await createRekomendasiPupuk({
+        bedeng_id: String(selectedBedengId),
+        bedeng_nama: `Bedeng ${selectedBedengId}`
+      });
       if (res.success) {
-        Alert.alert('Berhasil', 'Log rekomendasi pupuk otomatis berhasil dihasilkan.');
+        Alert.alert('Berhasil', `Rekomendasi pupuk untuk Bedeng ${selectedBedengId} berhasil dibuat.`);
         fetchData();
       } else {
         Alert.alert('Gagal', res.error || 'Gagal kalkulasi rekomendasi.');
@@ -225,6 +268,50 @@ export default function KegiatanScreen() {
     } catch (e) {
       console.warn(e);
     }
+  };
+
+  const handleDeleteJadwal = (id) => {
+    Alert.alert(
+      'Hapus Jadwal',
+      'Apakah Anda yakin ingin menghapus jadwal kegiatan ini?',
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Hapus',
+          style: 'destructive',
+          onPress: async () => {
+            const res = await deleteJadwalKegiatan(id);
+            if (res.success) {
+              fetchData();
+            } else {
+              Alert.alert('Gagal', res.error || 'Gagal menghapus jadwal.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const handleDeleteRekomendasi = (id) => {
+    Alert.alert(
+      'Hapus Rekomendasi',
+      'Apakah Anda yakin ingin menghapus log rekomendasi ini?',
+      [
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Hapus',
+          style: 'destructive',
+          onPress: async () => {
+            const res = await deleteRekomendasiPupuk(id);
+            if (res.success) {
+              fetchData();
+            } else {
+              Alert.alert('Gagal', res.error || 'Gagal menghapus rekomendasi.');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const formatDate = (dateStr) => {
@@ -288,10 +375,10 @@ export default function KegiatanScreen() {
           }
         >
           {activeTab === 'jadwal' ? (
-            // ================== TAB JADWAL ==================
+            // ================== TAB JADWAL TANI ==================
             <View>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Agenda Kegiatan Ormawa</Text>
+                <Text style={styles.sectionTitle}>Jadwal Kerja Tani</Text>
                 <TouchableOpacity
                   style={styles.addButton}
                   onPress={() => setModalVisible(true)}
@@ -344,12 +431,17 @@ export default function KegiatanScreen() {
                       <Text style={styles.cardDescription}>{item.deskripsi}</Text>
                     ) : null}
 
-                    {/* Alarm Indicator */}
-                    <View style={styles.reminderRow}>
-                      <Ionicons name="notifications-outline" size={14} color={colors.textMuted} />
-                      <Text style={styles.reminderLabel}>
-                        Notifikasi Pengingat H-1 Aktif
-                      </Text>
+                    {/* Alarm Indicator & Delete Action */}
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
+                      <View style={styles.reminderRow}>
+                        <Ionicons name="notifications-outline" size={14} color={colors.textMuted} />
+                        <Text style={styles.reminderLabel}>
+                          Notifikasi Pengingat H-1 Aktif
+                        </Text>
+                      </View>
+                      <TouchableOpacity onPress={() => handleDeleteJadwal(item.id)} style={{ padding: 4 }}>
+                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                      </TouchableOpacity>
                     </View>
                   </View>
                 ))
@@ -369,6 +461,28 @@ export default function KegiatanScreen() {
                 </TouchableOpacity>
               </View>
 
+              {/* Selector Bedeng Lahan */}
+              <View style={styles.bedengSelectorCard}>
+                <Text style={styles.bedengSelectorTitle}>Pilih Bedeng Target Kalkulasi:</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.bedengSelectorScroll}>
+                  {Array.from({ length: 16 }).map((_, idx) => {
+                    const bedengNo = idx + 1;
+                    const isSelected = selectedBedengId === bedengNo;
+                    return (
+                      <TouchableOpacity
+                        key={bedengNo}
+                        style={[styles.bedengChip, isSelected && styles.activeBedengChip]}
+                        onPress={() => setSelectedBedengId(bedengNo)}
+                      >
+                        <Text style={[styles.bedengChipText, isSelected && styles.activeBedengChipText]}>
+                          Bedeng {bedengNo}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+
               {rekomendasiList.length === 0 ? (
                 <View style={styles.emptyCard}>
                   <Ionicons name="flask-outline" size={48} color={colors.textMuted} />
@@ -379,7 +493,7 @@ export default function KegiatanScreen() {
                   <View key={item.id} style={styles.card}>
                     <View style={styles.cardHeader}>
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.recTitle}>Rekomendasi Pemupukan</Text>
+                        <Text style={styles.recTitle}>Rekomendasi Pemupukan - {item.bedeng_nama || 'Bedeng 1'}</Text>
                         <Text style={styles.cardDate}>
                           <Ionicons name="calendar-outline" size={12} color={colors.textMuted} />{' '}
                           {formatDate(item.tanggal)}
@@ -410,23 +524,15 @@ export default function KegiatanScreen() {
                       </TouchableOpacity>
                     </View>
 
-                    {/* Sensor stats chips */}
+                    {/* Sensor stats chips - pH and Kelembaban only */}
                     <View style={styles.sensorGrid}>
                       <View style={styles.sensorChip}>
-                        <Text style={styles.sensorLabel}>pH</Text>
-                        <Text style={styles.sensorVal}>{item.kandungan_sensor?.pH?.toFixed(1) || '-'}</Text>
+                        <Text style={styles.sensorLabel}>pH Tanah</Text>
+                        <Text style={styles.sensorVal}>{item.kandungan_sensor?.pH?.toFixed(2) || '-'}</Text>
                       </View>
                       <View style={styles.sensorChip}>
-                        <Text style={styles.sensorLabel}>N</Text>
-                        <Text style={styles.sensorVal}>{item.kandungan_sensor?.N?.toFixed(0) || '-'}</Text>
-                      </View>
-                      <View style={styles.sensorChip}>
-                        <Text style={styles.sensorLabel}>P</Text>
-                        <Text style={styles.sensorVal}>{item.kandungan_sensor?.P?.toFixed(0) || '-'}</Text>
-                      </View>
-                      <View style={styles.sensorChip}>
-                        <Text style={styles.sensorLabel}>K</Text>
-                        <Text style={styles.sensorVal}>{item.kandungan_sensor?.K?.toFixed(0) || '-'}</Text>
+                        <Text style={styles.sensorLabel}>Kelembaban</Text>
+                        <Text style={styles.sensorVal}>{item.kandungan_sensor?.kelembaban ? `${item.kandungan_sensor.kelembaban.toFixed(1)}%` : '-'}</Text>
                       </View>
                     </View>
 
@@ -436,6 +542,13 @@ export default function KegiatanScreen() {
 
                       <Text style={[styles.recSectionTitle, { marginTop: 8 }]}>Dosis Kerja:</Text>
                       <Text style={styles.dosisVal}>{item.dosis}</Text>
+                    </View>
+
+                    <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.border }}>
+                      <TouchableOpacity onPress={() => handleDeleteRekomendasi(item.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, padding: 4 }}>
+                        <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                        <Text style={{ fontSize: 12, color: colors.danger, fontWeight: '600' }}>Hapus Log</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
                 ))
@@ -455,7 +568,7 @@ export default function KegiatanScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Tambah Jadwal Kegiatan</Text>
+              <Text style={styles.modalTitle}>Tambah Kegiatan Tani</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                 <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
@@ -483,7 +596,7 @@ export default function KegiatanScreen() {
               <Text style={styles.inputLabel}>Deskripsi</Text>
               <TextInput
                 style={[styles.input, styles.textArea]}
-                placeholder="Tuliskan catatan detail kegiatan ormawa..."
+                placeholder="Tuliskan catatan detail kegiatan tani..."
                 placeholderTextColor={colors.textMuted}
                 multiline={true}
                 numberOfLines={3}
@@ -527,7 +640,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tabButtonActive: {
-    backgroundColor: colors.primary + '15',
+    backgroundColor: withAlpha(colors.primary, 0.12),
   },
   tabText: {
     fontSize: 14,
@@ -536,12 +649,14 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: colors.primary,
+    fontWeight: 'bold',
   },
   scroll: {
     flex: 1,
   },
   scrollContent: {
-    padding: 16,
+    padding: 20,
+    paddingTop: 30,
     paddingBottom: 40,
   },
   center: {
@@ -654,12 +769,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   badgeSuccess: {
-    backgroundColor: colors.success + '15',
-    borderColor: colors.success + '30',
+    backgroundColor: withAlpha(colors.success, 0.15),
+    borderColor: withAlpha(colors.success, 0.3),
   },
   badgeWarning: {
-    backgroundColor: colors.warning + '15',
-    borderColor: colors.warning + '30',
+    backgroundColor: withAlpha(colors.warning, 0.15),
+    borderColor: withAlpha(colors.warning, 0.3),
   },
   badgeText: {
     fontSize: 11,
@@ -788,5 +903,101 @@ const styles = StyleSheet.create({
     color: colors.card,
     fontSize: 14,
     fontWeight: 'bold',
+  },
+  subTabContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 16,
+  },
+  subTabButton: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  subTabButtonActive: {
+    backgroundColor: colors.card,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  subTabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  subTabTextActive: {
+    color: colors.primary,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  chip: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  chipActive: {
+    borderColor: colors.primary,
+    backgroundColor: withAlpha(colors.primary, 0.1),
+  },
+  chipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  chipTextActive: {
+    color: colors.primary,
+  },
+  bedengSelectorCard: {
+    backgroundColor: colors.card,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginBottom: 16,
+  },
+  bedengSelectorTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 8,
+  },
+  bedengSelectorScroll: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  bedengChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+    marginRight: 6,
+  },
+  activeBedengChip: {
+    borderColor: colors.primary,
+    backgroundColor: withAlpha(colors.primary, 0.1),
+  },
+  bedengChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  activeBedengChipText: {
+    color: colors.primary,
+    fontWeight: '700',
   }
 });

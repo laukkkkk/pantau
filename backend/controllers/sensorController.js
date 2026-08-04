@@ -1,5 +1,4 @@
 const { SensorData } = require('../models');
-const { Op } = require('sequelize');
 
 /**
  * Menerima payload data sensor baru
@@ -7,24 +6,28 @@ const { Op } = require('sequelize');
  */
 exports.createSensorData = async (req, res, next) => {
   try {
-    const { kelembaban, pH, N, P, K, timestamp } = req.body;
+    const { kelembaban, pH, bedeng_id, timestamp } = req.body;
 
     // Validasi input wajib
-    if (kelembaban === undefined || pH === undefined || N === undefined || P === undefined || K === undefined) {
+    if (kelembaban === undefined || pH === undefined) {
       return res.status(400).json({
         success: false,
-        message: 'Parameter sensor (kelembaban, pH, N, P, K) tidak boleh kosong.'
+        message: 'Parameter sensor (kelembaban, pH) tidak boleh kosong.'
       });
     }
 
-    const sensorLog = await SensorData.create({
+    const docRef = SensorData.doc();
+    const sensorLog = {
+      id: docRef.id,
       kelembaban: parseFloat(kelembaban),
       pH: parseFloat(pH),
-      N: parseFloat(N),
-      P: parseFloat(P),
-      K: parseFloat(K),
-      timestamp: timestamp ? new Date(timestamp) : new Date()
-    });
+      bedeng_id: bedeng_id !== undefined ? String(bedeng_id) : null,
+      timestamp: timestamp ? new Date(timestamp).toISOString() : new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    await docRef.set(sensorLog);
 
     res.status(201).json({
       success: true,
@@ -38,31 +41,40 @@ exports.createSensorData = async (req, res, next) => {
 
 /**
  * Mendapatkan daftar seluruh data sensor dengan filter waktu opsional
- * GET /api/sensor-data?from=...&to=...
+ * GET /api/sensor-data?from=...&to=...&bedeng_id=...
  */
 exports.getSensorData = async (req, res, next) => {
   try {
-    const { from, to } = req.query;
-    const where = {};
-
-    if (from && to) {
-      where.timestamp = {
-        [Op.between]: [new Date(from), new Date(to)]
-      };
-    } else if (from) {
-      where.timestamp = {
-        [Op.gte]: new Date(from)
-      };
-    } else if (to) {
-      where.timestamp = {
-        [Op.lte]: new Date(to)
-      };
+    const { from, to, bedeng_id } = req.query;
+    
+    let query = SensorData;
+    if (bedeng_id) {
+      // Support matching string or numeric bedeng_id representation defensively
+      query = query.where('bedeng_id', 'in', [String(bedeng_id), parseInt(bedeng_id)]);
     }
 
-    const records = await SensorData.findAll({
-      where,
-      order: [['timestamp', 'ASC']]
+    const snapshot = await query.get();
+    let records = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      if (!data.timestamp) {
+        data.timestamp = doc.createTime ? doc.createTime.toDate().toISOString() : new Date().toISOString();
+      }
+      records.push(data);
     });
+
+    // In-memory filters for time boundaries to avoid index requirement
+    if (from) {
+      const fromDate = new Date(from);
+      records = records.filter(r => new Date(r.timestamp) >= fromDate);
+    }
+    if (to) {
+      const toDate = new Date(to);
+      records = records.filter(r => new Date(r.timestamp) <= toDate);
+    }
+
+    // Sort by timestamp ASC
+    records.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
 
     res.status(200).json({
       success: true,
@@ -76,20 +88,37 @@ exports.getSensorData = async (req, res, next) => {
 
 /**
  * Mendapatkan satu data sensor paling terbaru
- * GET /api/sensor-data/latest
+ * GET /api/sensor-data/latest?bedeng_id=...
  */
 exports.getLatestSensorData = async (req, res, next) => {
   try {
-    const latest = await SensorData.findOne({
-      order: [['timestamp', 'DESC']]
-    });
+    const { bedeng_id } = req.query;
+    
+    let query = SensorData;
+    if (bedeng_id) {
+      query = query.where('bedeng_id', 'in', [String(bedeng_id), parseInt(bedeng_id)]);
+    }
 
-    if (!latest) {
+    const snapshot = await query.get();
+    if (snapshot.empty) {
       return res.status(404).json({
         success: false,
         message: 'Data sensor belum tersedia.'
       });
     }
+
+    const records = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      if (!data.timestamp) {
+        data.timestamp = doc.createTime ? doc.createTime.toDate().toISOString() : new Date().toISOString();
+      }
+      records.push(data);
+    });
+
+    // Sort by timestamp DESC in memory
+    records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const latest = records[0];
 
     res.status(200).json({
       success: true,

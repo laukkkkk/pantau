@@ -26,7 +26,13 @@ Setiap service dijalankan secara mandiri dari dalam folder masing-masing.
 
 ### 1. Backend Service
 
-Layanan backend menangani API utama, autentikasi, serta interaksi dengan database.
+Layanan backend menangani API utama, pengolahan data sensor & bisnis, serta interaksi dengan database.
+
+> [!NOTE]  
+> **Tanpa Fitur Login / Autentikasi Pengguna**: Aplikasi ini secara sengaja dirancang tanpa sistem login/autentikasi pengguna karena ditujukan untuk penggunaan operasional kolektif oleh 1 kelompok tani di demplot pertanian, sehingga semua anggota dapat langsung mengakses dan menginput data tanpa hambatan autentikasi.
+
+> [!NOTE]  
+> **Ingestion Data Sensor Berubah**: Mulai versi arsitektur baru, backend Express **tidak lagi menangani ingestion / penerimaan data sensor** secara aktif (baik dari MQTT broker maupun HTTP POST ingestion). Data sensor dikirimkan langsung oleh Gateway Node ke Firebase Firestore menggunakan REST API. Backend saat ini bertindak sebagai pembaca (read-only) data dari Firestore menggunakan Firebase Admin SDK untuk kebutuhan API Dashboard dan Aplikasi Mobile.
 
 1. Masuk ke direktori backend:
    ```bash
@@ -49,6 +55,10 @@ Layanan backend menangani API utama, autentikasi, serta interaksi dengan databas
 ### 2. Mobile Service
 
 Aplikasi klien mobile yang digunakan oleh pengguna akhir.
+
+> [!NOTE]  
+> **Catatan Notifikasi di Expo Go (Expo SDK 53+)**:  
+> Saat menjalankan aplikasi di Android via **Expo Go**, modul `expo-notifications` dapat memicu warning bawaan Expo karena fitur remote push notification telah dihapus dari Expo Go sejak SDK 53. Peringatan ini diredam secara aman agar tidak memicu layar error merah di UI saat testing, dan fitur pengingat notifikasi lokal akan berfungsi secara penuh pada **Development Build (EAS)** atau **APK produksi**.
 
 1. Masuk ke direktori mobile:
    ```bash

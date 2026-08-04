@@ -7,39 +7,66 @@ import { colors } from '../theme/colors';
 export default function MonitoringScreen() {
   const [latestData, setLatestData] = useState(null);
   const [historyData, setHistoryData] = useState([]);
-  const [selectedParam, setSelectedParam] = useState('kelembaban'); // 'kelembaban', 'pH', 'N', 'P', 'K'
+  const [selectedParam, setSelectedParam] = useState('kelembaban');
+  const [selectedBedeng, setSelectedBedeng] = useState(1);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [alerts, setAlerts] = useState([]);
 
-  const fetchData = async () => {
-    setLoading(true);
-    const latestResult = await getLatestSensor();
-    const historyResult = await getSensorHistory();
+  const fetchData = async (bedengId) => {
+    if (!latestData) {
+      setLoading(true);
+    }
+    try {
+      const [latestResult, historyResult] = await Promise.all([
+        getLatestSensor(bedengId),
+        getSensorHistory(bedengId)
+      ]);
 
-    if (latestResult.success && latestResult.data) {
-      setLatestData(latestResult.data);
-      checkThresholds(latestResult.data);
+      if (latestResult.success && latestResult.data) {
+        setLatestData(latestResult.data);
+        checkThresholds(latestResult.data);
+      } else {
+        setLatestData(null);
+        setAlerts([]);
+      }
+      if (historyResult.success && historyResult.data) {
+        setHistoryData(historyResult.data);
+      } else {
+        setHistoryData([]);
+      }
+    } catch (err) {
+      console.warn('Monitoring fetchData error:', err.message);
+    } finally {
+      setLoading(false);
     }
-    if (historyResult.success && historyResult.data) {
-      setHistoryData(historyResult.data);
-    }
-    setLoading(false);
   };
 
   const onRefresh = async () => {
     setRefreshing(true);
-    const latestResult = await getLatestSensor();
-    const historyResult = await getSensorHistory();
+    try {
+      const [latestResult, historyResult] = await Promise.all([
+        getLatestSensor(selectedBedeng),
+        getSensorHistory(selectedBedeng)
+      ]);
 
-    if (latestResult.success && latestResult.data) {
-      setLatestData(latestResult.data);
-      checkThresholds(latestResult.data);
+      if (latestResult.success && latestResult.data) {
+        setLatestData(latestResult.data);
+        checkThresholds(latestResult.data);
+      } else {
+        setLatestData(null);
+        setAlerts([]);
+      }
+      if (historyResult.success && historyResult.data) {
+        setHistoryData(historyResult.data);
+      } else {
+        setHistoryData([]);
+      }
+    } catch (err) {
+      console.warn('Monitoring onRefresh error:', err.message);
+    } finally {
+      setRefreshing(false);
     }
-    if (historyResult.success && historyResult.data) {
-      setHistoryData(historyResult.data);
-    }
-    setRefreshing(false);
   };
 
   const checkThresholds = (data) => {
@@ -59,35 +86,17 @@ export default function MonitoringScreen() {
       listAlerts.push(`pH tanah terlalu basa (${data.pH} pH).`);
     }
 
-    // Nitrogen N Threshold (Ideal: > 40 ppm)
-    if (data.N < 40) {
-      listAlerts.push(`Kandungan Nitrogen (N) rendah (${data.N} ppm). Disarankan pemupukan Urea.`);
-    }
-
-    // Fosfor P Threshold (Ideal: > 30 ppm)
-    if (data.P < 30) {
-      listAlerts.push(`Kandungan Fosfor (P) rendah (${data.P} ppm). Disarankan pemupukan SP-36.`);
-    }
-
-    // Kalium K Threshold (Ideal: > 45 ppm)
-    if (data.K < 45) {
-      listAlerts.push(`Kandungan Kalium (K) rendah (${data.K} ppm). Disarankan pemupukan KCl.`);
-    }
-
     setAlerts(listAlerts);
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    fetchData(selectedBedeng);
+  }, [selectedBedeng]);
 
   const getParamLabel = (param) => {
     switch (param) {
       case 'kelembaban': return 'Kelembaban';
       case 'pH': return 'pH Tanah';
-      case 'N': return 'Nitrogen (N)';
-      case 'P': return 'Fosfor (P)';
-      case 'K': return 'Kalium (K)';
       default: return '';
     }
   };
@@ -96,7 +105,7 @@ export default function MonitoringScreen() {
     switch (param) {
       case 'kelembaban': return '%';
       case 'pH': return 'pH';
-      default: return 'ppm';
+      default: return '';
     }
   };
 
@@ -163,6 +172,27 @@ export default function MonitoringScreen() {
         <Text style={styles.subtitle}>Parameter sensor realtime & histori demplot tani.</Text>
       </View>
 
+      {/* Bedeng Selector Horizontal Capsules */}
+      <Text style={styles.sectionTitle}>Pilih Bedeng Demplot</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.bedengSelectorScroll}
+        contentContainerStyle={styles.bedengSelectorContent}
+      >
+        {Array.from({ length: 16 }, (_, i) => i + 1).map((num) => (
+          <TouchableOpacity
+            key={num}
+            style={[styles.bedengCapsule, selectedBedeng === num && styles.activeBedengCapsule]}
+            onPress={() => setSelectedBedeng(num)}
+          >
+            <Text style={[styles.bedengCapsuleText, selectedBedeng === num && styles.activeBedengCapsuleText]}>
+              Bedeng {num}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
       {/* Threshold Alert Banner */}
       {alerts.length > 0 && (
         <View style={styles.alertCard}>
@@ -195,30 +225,6 @@ export default function MonitoringScreen() {
             {latestData?.pH >= 6.0 && latestData?.pH <= 7.2 ? 'Netral' : 'Kritis'}
           </Text>
         </View>
-
-        <View style={styles.gridItem}>
-          <Text style={styles.sensorName}>Nitrogen (N)</Text>
-          <Text style={[styles.sensorValue, { color: colors.primaryLight }]}>
-            {latestData ? `${latestData.N} ppm` : '--'}
-          </Text>
-          <Text style={styles.sensorStatus}>{latestData?.N >= 40 ? 'Cukup' : 'Kurang'}</Text>
-        </View>
-
-        <View style={styles.gridItem}>
-          <Text style={styles.sensorName}>Fosfor (P)</Text>
-          <Text style={[styles.sensorValue, { color: colors.primaryLight }]}>
-            {latestData ? `${latestData.P} ppm` : '--'}
-          </Text>
-          <Text style={styles.sensorStatus}>{latestData?.P >= 30 ? 'Cukup' : 'Kurang'}</Text>
-        </View>
-
-        <View style={styles.gridItem}>
-          <Text style={styles.sensorName}>Kalium (K)</Text>
-          <Text style={[styles.sensorValue, { color: colors.primaryLight }]}>
-            {latestData ? `${latestData.K} ppm` : '--'}
-          </Text>
-          <Text style={styles.sensorStatus}>{latestData?.K >= 45 ? 'Cukup' : 'Kurang'}</Text>
-        </View>
       </View>
 
       {/* Interactive Chart Section */}
@@ -226,7 +232,7 @@ export default function MonitoringScreen() {
       
       {/* Parameter Filter Tabs */}
       <View style={styles.tabsContainer}>
-        {['kelembaban', 'pH', 'N', 'P', 'K'].map((param) => (
+        {['kelembaban', 'pH'].map((param) => (
           <TouchableOpacity
             key={param}
             style={[styles.tab, selectedParam === param && styles.activeTab]}
@@ -279,7 +285,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 20,
-    paddingTop: 40,
+    paddingTop: 30,
   },
   loadingContainer: {
     flex: 1,
@@ -296,7 +302,7 @@ const styles = StyleSheet.create({
     marginBottom: 25,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     color: colors.text,
   },
@@ -422,5 +428,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.textMuted,
     marginVertical: 20,
+  },
+  bedengSelectorScroll: {
+    marginBottom: 20,
+    marginTop: 5,
+  },
+  bedengSelectorContent: {
+    paddingRight: 20,
+  },
+  bedengCapsule: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  activeBedengCapsule: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  bedengCapsuleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textMuted,
+  },
+  activeBedengCapsuleText: {
+    color: '#ffffff',
+    fontWeight: 'bold',
   },
 });
