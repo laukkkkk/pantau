@@ -12,7 +12,6 @@
     "android": {
       "package": "hma.pantauapss",
       "versionCode": 1,
-      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -22,6 +21,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "dde966f0-fdcc-41a1-9299-179d33c97624"
+      }
     }
   }
 }
