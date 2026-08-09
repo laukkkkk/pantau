@@ -3,13 +3,19 @@ const path = require('path');
 
 // Initialize Firebase Admin
 try {
-  const serviceAccountPath = path.resolve(__dirname, '../firebase-service-account.json');
-  const serviceAccount = require(serviceAccountPath);
-
   if (!admin.apps.length) {
+    let serviceAccount;
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+    } else {
+      const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH 
+        ? path.resolve(__dirname, '..', process.env.FIREBASE_SERVICE_ACCOUNT_PATH)
+        : path.resolve(__dirname, '../firebase-service-account.json');
+      serviceAccount = require(serviceAccountPath);
+    }
+
     admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-      storageBucket: process.env.FIREBASE_STORAGE_BUCKET || `${serviceAccount.project_id}.appspot.com`
+      credential: admin.credential.cert(serviceAccount)
     });
   }
 } catch (error) {

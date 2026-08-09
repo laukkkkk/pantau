@@ -1,6 +1,7 @@
-const { DeteksiHama, admin } = require('../models');
+const { DeteksiHama } = require('../models');
 const fs = require('fs');
 const path = require('path');
+const { put, del } = require('@vercel/blob');
 
 /**
  * Memproses unggahan foto tanaman, mengirim ke AI service, dan menyimpan log deteksi hama
@@ -26,9 +27,15 @@ exports.createDeteksi = async (req, res, next) => {
     // 2. Hubungi FastAPI predict endpoint dengan fallback aman
     let aiResponse;
     try {
+      const headers = {};
+      if (process.env.INTERNAL_API_KEY) {
+        headers['x-api-key'] = process.env.INTERNAL_API_KEY;
+      }
+
       const response = await fetch(`${aiServiceUrl}/predict`, {
         method: 'POST',
-        body: formData
+        body: formData,
+        headers
       });
 
       if (!response.ok) {
@@ -107,25 +114,14 @@ exports.createDeteksi = async (req, res, next) => {
       }
     }
 
-    // 5. Unggah foto ke Firebase Storage
-    const bucket = admin.storage().bucket();
+    // 5. Upload file ke Vercel Blob
+    const cleanName = req.file.originalname.replace(/\s+/g, '_');
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const cleanedName = req.file.originalname.replace(/\s+/g, '_');
-    const blobName = `deteksi_${uniqueSuffix}_${cleanedName}`;
-    const file = bucket.file(blobName);
-
-    await file.save(req.file.buffer, {
-      contentType: req.file.mimetype,
-      resumable: false
+    const filename = `deteksi_${uniqueSuffix}_${cleanName}`;
+    const blobResult = await put(filename, req.file.buffer, {
+      access: 'public',
     });
-
-    try {
-      await file.makePublic();
-    } catch (err) {
-      console.log('Note: makePublic failed, probably UBLA is enabled on the bucket. Falling back to public URL structure.');
-    }
-
-    const foto_url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(file.name)}?alt=media`;
+    const foto_url = blobResult.url;
 
     // 6. Simpan log deteksi ke Database
     const docRef = DeteksiHama.doc();
@@ -230,30 +226,13 @@ exports.deleteDeteksi = async (req, res, next) => {
     }
 
     const data = doc.data();
-    // Hapus berkas gambar fisik di Firebase Storage jika ada (dengan fallback ke disk lokal untuk data lama)
+    // Hapus berkas gambar di Vercel Blob atau folder uploads lokal jika ada
     if (data && data.foto_url) {
-      const bucket = admin.storage().bucket();
-      if (data.foto_url.includes('firebasestorage.googleapis.com') || data.foto_url.includes('storage.googleapis.com')) {
-        let fileName = null;
-        if (data.foto_url.includes('/o/')) {
-          const parts = data.foto_url.split('/o/');
-          if (parts.length > 1) {
-            fileName = decodeURIComponent(parts[1].split('?')[0]);
-          }
-        } else if (data.foto_url.includes(bucket.name)) {
-          const parts = data.foto_url.split(`${bucket.name}/`);
-          if (parts.length > 1) {
-            fileName = decodeURIComponent(parts[1]);
-          }
-        }
-
-        if (fileName) {
-          try {
-            await bucket.file(fileName).delete();
-            console.log(`Successfully deleted file from Firebase Storage: ${fileName}`);
-          } catch (err) {
-            console.warn(`Failed to delete file ${fileName} from Firebase Storage:`, err.message);
-          }
+      if (data.foto_url.includes('public.blob.vercel-storage.com')) {
+        try {
+          await del(data.foto_url);
+        } catch (e) {
+          console.warn('Failed to delete image from Vercel Blob:', e.message);
         }
       } else {
         const filename = data.foto_url.split('/uploads/')[1];

@@ -1,6 +1,6 @@
 import random
 import os
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, UploadFile, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import torch
@@ -10,10 +10,17 @@ import torchvision.models as models
 from PIL import Image
 import io
 
+INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
+env = os.getenv("ENV") or os.getenv("NODE_ENV") or "development"
+docs_url = None if env == "production" else "/docs"
+redoc_url = None if env == "production" else "/redoc"
+
 app = FastAPI(
     title="Pantau AI Service",
     description="Microservice untuk deteksi hama dan penyakit tanaman menggunakan model deep learning.",
-    version="1.0.0"
+    version="1.0.0",
+    docs_url=docs_url,
+    redoc_url=redoc_url
 )
 
 # Konfigurasi CORS
@@ -106,8 +113,16 @@ def read_root():
     }
 
 @app.post("/predict", response_model=PredictionResponse)
-async def predict_pest(file: UploadFile = File(...)):
+async def predict_pest(
+    file: UploadFile = File(...),
+    x_api_key: str = Header(None)
+):
     global model
+    
+    # Verify API key if configured
+    if INTERNAL_API_KEY and x_api_key != INTERNAL_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+        
     filename = file.filename.lower()
     
     # 1. Try PyTorch inference if model is loaded
