@@ -1,4 +1,4 @@
-const { DeteksiHama } = require('../models');
+const { DeteksiHama, admin } = require('../models');
 const fs = require('fs');
 const path = require('path');
 
@@ -20,8 +20,7 @@ exports.createDeteksi = async (req, res, next) => {
 
     // 1. Siapkan FormData untuk diteruskan ke AI Service
     const formData = new FormData();
-    const fileBuffer = fs.readFileSync(req.file.path);
-    const blob = new Blob([fileBuffer], { type: req.file.mimetype });
+    const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
     formData.append('file', blob, req.file.originalname);
 
     // 2. Hubungi FastAPI predict endpoint dengan fallback aman
@@ -108,10 +107,28 @@ exports.createDeteksi = async (req, res, next) => {
       }
     }
 
-    // 5. Simpan log deteksi ke Database
+    // 5. Unggah foto ke Firebase Storage
+    const bucket = admin.storage().bucket();
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const cleanedName = req.file.originalname.replace(/\s+/g, '_');
+    const blobName = `deteksi_${uniqueSuffix}_${cleanedName}`;
+    const file = bucket.file(blobName);
+
+    await file.save(req.file.buffer, {
+      contentType: req.file.mimetype,
+      resumable: false
+    });
+
+    try {
+      await file.makePublic();
+    } catch (err) {
+      console.log('Note: makePublic failed, probably UBLA is enabled on the bucket. Falling back to public URL structure.');
+    }
+
+    const foto_url = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(file.name)}?alt=media`;
+
+    // 6. Simpan log deteksi ke Database
     const docRef = DeteksiHama.doc();
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const foto_url = `${baseUrl}/uploads/${req.file.filename}`;
     const newDeteksi = {
       id: docRef.id,
       nama_hama: hasil_klasifikasi,
@@ -213,16 +230,41 @@ exports.deleteDeteksi = async (req, res, next) => {
     }
 
     const data = doc.data();
-    // Hapus berkas gambar fisik di folder uploads jika ada
+    // Hapus berkas gambar fisik di Firebase Storage jika ada (dengan fallback ke disk lokal untuk data lama)
     if (data && data.foto_url) {
-      const filename = data.foto_url.split('/uploads/')[1];
-      if (filename) {
-        const filePath = path.join(__dirname, '../uploads', filename);
-        if (fs.existsSync(filePath)) {
+      const bucket = admin.storage().bucket();
+      if (data.foto_url.includes('firebasestorage.googleapis.com') || data.foto_url.includes('storage.googleapis.com')) {
+        let fileName = null;
+        if (data.foto_url.includes('/o/')) {
+          const parts = data.foto_url.split('/o/');
+          if (parts.length > 1) {
+            fileName = decodeURIComponent(parts[1].split('?')[0]);
+          }
+        } else if (data.foto_url.includes(bucket.name)) {
+          const parts = data.foto_url.split(`${bucket.name}/`);
+          if (parts.length > 1) {
+            fileName = decodeURIComponent(parts[1]);
+          }
+        }
+
+        if (fileName) {
           try {
-            fs.unlinkSync(filePath);
-          } catch (e) {
-            console.warn('Failed to delete image file:', e.message);
+            await bucket.file(fileName).delete();
+            console.log(`Successfully deleted file from Firebase Storage: ${fileName}`);
+          } catch (err) {
+            console.warn(`Failed to delete file ${fileName} from Firebase Storage:`, err.message);
+          }
+        }
+      } else {
+        const filename = data.foto_url.split('/uploads/')[1];
+        if (filename) {
+          const filePath = path.join(__dirname, '../uploads', filename);
+          if (fs.existsSync(filePath)) {
+            try {
+              fs.unlinkSync(filePath);
+            } catch (e) {
+              console.warn('Failed to delete image file:', e.message);
+            }
           }
         }
       }
