@@ -35,5 +35,6 @@ firebase-service-account.json
 pantau-apps-hma2026-firebase-adminsdk-fbsvc-*.json
 
 # Uploads
-uploads/
+uploads/*
+!uploads/Buku_Saku_Cabe_Jawa_Gabungan.pdf
 
