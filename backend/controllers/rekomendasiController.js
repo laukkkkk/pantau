@@ -1,5 +1,6 @@
 const { RekomendasiPupuk, SensorData } = require('../models');
 const { getFertilizerRecommendation } = require('../utils/fertilizerRules');
+const { getLatestSensorForBedeng } = require('../utils/sensorHelper');
 
 /**
  * Mendapatkan daftar riwayat rekomendasi pupuk
@@ -38,28 +39,7 @@ exports.createRekomendasi = async (req, res, next) => {
 
     // If parameters not provided, fetch latest sensor readings for this specific bedeng
     if (pH === undefined || kelembaban === undefined) {
-      let foundData = null;
-
-      // Try to find the sensor reading in the 100 most recent global records to avoid composite index requirement
-      const globalSnapshot = await SensorData.orderBy('timestamp', 'desc').limit(100).get();
-      if (!globalSnapshot.empty) {
-        const match = globalSnapshot.docs
-          .map(doc => doc.data())
-          .find(d => String(d.bedeng_id) === targetBedengId);
-        if (match) {
-          foundData = match;
-        }
-      }
-
-      // If not found in the recent global logs, query the bedeng directly without orderBy (avoiding composite index)
-      if (!foundData) {
-        const bedengSnapshot = await SensorData.where('bedeng_id', '==', targetBedengId).get();
-        if (!bedengSnapshot.empty) {
-          const list = bedengSnapshot.docs.map(doc => doc.data());
-          list.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          foundData = list[0];
-        }
-      }
+      const foundData = await getLatestSensorForBedeng(targetBedengId);
 
       if (foundData) {
         if (pH === undefined) pH = foundData.pH;

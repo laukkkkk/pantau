@@ -20,6 +20,15 @@
     "web": {
       "favicon": "./assets/pantau.png"
     },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Aplikasi PANTAU memerlukan akses kamera untuk memindai hama.",
+          "photosPermission": "Aplikasi PANTAU memerlukan akses galeri untuk memilih foto."
+        }
+      ]
+    ],
     "extra": {
       "eas": {
         "projectId": "dde966f0-fdcc-41a1-9299-179d33c97624"

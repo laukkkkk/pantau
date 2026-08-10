@@ -160,10 +160,10 @@ export default function ScanHamaScreen() {
     if (!hasPermission) return;
 
     const result = await ImagePicker.launchCameraAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [4, 3],
-      quality: 0.8,
+      quality: 0.7,
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
@@ -178,10 +178,10 @@ export default function ScanHamaScreen() {
     if (!hasPermission) return;
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: true,
       aspect: [4, 3],
-      quality: 0.8,
+      quality: 0.7,
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {

@@ -1,4 +1,5 @@
 const { SensorData } = require('../models');
+const { getLatestSensorForBedeng } = require('../utils/sensorHelper');
 
 /**
  * Menerima payload data sensor baru
@@ -94,31 +95,13 @@ exports.getLatestSensorData = async (req, res, next) => {
   try {
     const { bedeng_id } = req.query;
     
-    let query = SensorData;
-    if (bedeng_id) {
-      query = query.where('bedeng_id', 'in', [String(bedeng_id), parseInt(bedeng_id)]);
-    }
-
-    const snapshot = await query.get();
-    if (snapshot.empty) {
+    const latest = await getLatestSensorForBedeng(bedeng_id);
+    if (!latest) {
       return res.status(404).json({
         success: false,
         message: 'Data sensor belum tersedia.'
       });
     }
-
-    const records = [];
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      if (!data.timestamp) {
-        data.timestamp = doc.createTime ? doc.createTime.toDate().toISOString() : new Date().toISOString();
-      }
-      records.push(data);
-    });
-
-    // Sort by timestamp DESC in memory
-    records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    const latest = records[0];
 
     res.status(200).json({
       success: true,
