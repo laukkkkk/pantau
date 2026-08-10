@@ -21,7 +21,6 @@ import {
   createSiklus,
   updateSiklus,
   deleteSiklus,
-  getLahanProfile,
   getBedengList,
   getLatestSensor,
   getSensorHistory,
@@ -35,74 +34,7 @@ const { width } = Dimensions.get('window');
 // List pilihan baku komoditas / jenis tanaman
 const KOMODITAS_OPTIONS = ['Cabai Jawa', 'Padi', 'Jagung', 'Tomat', 'Bawang Merah', 'Lainnya'];
 
-// Data Poligon Tutupan Lahan Desa Pancawati
-const LAND_COVERS = [
-  {
-    id: 'hutan',
-    name: 'Hutan / Vegetasi Keras',
-    color: '#2e7d32',
-    fillColor: 'rgba(46, 125, 50, 0.25)',
-    coordinates: [
-      { latitude: -6.7160, longitude: 106.8570 },
-      { latitude: -6.7100, longitude: 106.8570 },
-      { latitude: -6.7100, longitude: 106.8600 },
-      { latitude: -6.7160, longitude: 106.8600 },
-      { latitude: -6.7160, longitude: 106.8570 }
-    ]
-  },
-  {
-    id: 'sawah',
-    name: 'Sawah / Pertanian',
-    color: '#8bc34a',
-    fillColor: 'rgba(139, 195, 74, 0.25)',
-    coordinates: [
-      { latitude: -6.7150, longitude: 106.8520 },
-      { latitude: -6.7110, longitude: 106.8520 },
-      { latitude: -6.7110, longitude: 106.8560 },
-      { latitude: -6.7150, longitude: 106.8560 },
-      { latitude: -6.7150, longitude: 106.8520 }
-    ]
-  },
-  {
-    id: 'permukiman',
-    name: 'Permukiman / Jalan',
-    color: '#ff5252',
-    fillColor: 'rgba(244, 67, 54, 0.25)',
-    coordinates: [
-      { latitude: -6.7100, longitude: 106.8500 },
-      { latitude: -6.7080, longitude: 106.8500 },
-      { latitude: -6.7080, longitude: 106.8530 },
-      { latitude: -6.7100, longitude: 106.8530 },
-      { latitude: -6.7100, longitude: 106.8500 }
-    ]
-  },
-  {
-    id: 'perairan',
-    name: 'Perairan / Sungai',
-    color: '#2196f3',
-    fillColor: 'rgba(33, 150, 243, 0.25)',
-    coordinates: [
-      { latitude: -6.7160, longitude: 106.8480 },
-      { latitude: -6.7140, longitude: 106.8480 },
-      { latitude: -6.7140, longitude: 106.8510 },
-      { latitude: -6.7160, longitude: 106.8510 },
-      { latitude: -6.7160, longitude: 106.8480 }
-    ]
-  }
-];
 
-// Conditional native import for react-native-maps to prevent web webpack build issues
-let MapView, Marker, Polygon;
-if (Platform.OS !== 'web') {
-  try {
-    const Maps = require('react-native-maps');
-    MapView = Maps.default;
-    Marker = Maps.Marker;
-    Polygon = Maps.Polygon;
-  } catch (err) {
-    console.warn('Failed to load react-native-maps on native wrapper:', err.message);
-  }
-}
 
 export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
@@ -110,7 +42,6 @@ export default function DashboardScreen() {
   const [dashboardData, setDashboardData] = useState(null);
 
   // GIS Data States
-  const [lahan, setLahan] = useState(null);
   const [bedengs, setBedengs] = useState([]);
 
   // Bedeng Selection & Monitoring States
@@ -170,9 +101,8 @@ export default function DashboardScreen() {
   const fetchAllData = async (targetBedeng) => {
     const bedengId = targetBedeng || selectedBedengId || 1;
     try {
-      const [dashboardResult, lahanResult, bedengResult, latestResult, historyResult, deviceResult] = await Promise.all([
+      const [dashboardResult, bedengResult, latestResult, historyResult, deviceResult] = await Promise.all([
         getDashboardRingkasan(),
-        getLahanProfile(),
         getBedengList(),
         getLatestSensor(bedengId),
         getSensorHistory(bedengId),
@@ -181,10 +111,6 @@ export default function DashboardScreen() {
 
       if (dashboardResult.success && dashboardResult.data) {
         setDashboardData(dashboardResult.data);
-      }
-
-      if (lahanResult.success) {
-        setLahan(lahanResult.data);
       }
 
       if (bedengResult.success && bedengResult.data.length > 0) {
@@ -444,26 +370,7 @@ export default function DashboardScreen() {
     return months[new Date().getMonth()];
   };
 
-  const getPolygonLatLngs = (polygonBatas) => {
-    const target = polygonBatas || (lahan && lahan.polygon_batas);
-    if (!target || !target.coordinates) return [];
-    const ring = target.coordinates[0];
-    return ring.map(pt => ({
-      latitude: parseFloat(pt[0]),
-      longitude: parseFloat(pt[1])
-    }));
-  };
 
-  const getCenterLatLng = () => {
-    if (lahan && lahan.koordinat_center && lahan.koordinat_center.coordinates) {
-      return {
-        latitude: parseFloat(lahan.koordinat_center.coordinates[0]),
-        longitude: parseFloat(lahan.koordinat_center.coordinates[1])
-      };
-    }
-    // Default coordinate (Desa Pancawati, Caringin, Bogor)
-    return { latitude: -6.71275, longitude: 106.853778 };
-  };
 
   const getChartData = () => {
     if (sensorHistory.length === 0) {
@@ -508,8 +415,6 @@ export default function DashboardScreen() {
 
   const selectedBedengObj = bedengs.find(b => b.id === selectedBedengId);
   const selectedBedengName = selectedBedengObj?.nama || (selectedBedengObj?.nomor_bedeng ? `Bedeng ${selectedBedengObj.nomor_bedeng}` : `Bedeng ${selectedBedengId}`);
-  const centerCoord = getCenterLatLng();
-  const polygonCoords = getPolygonLatLngs();
 
   return (
     <ScrollView
@@ -528,101 +433,6 @@ export default function DashboardScreen() {
         <TouchableOpacity style={styles.refreshIconBtn} onPress={handleRefresh}>
           <Ionicons name="refresh" size={22} color={colors.primary} />
         </TouchableOpacity>
-      </View>
-
-      {/* SECTION 1: PETA GIS DEMPLOT */}
-      <Text style={styles.sectionTitle}>Peta Demplot Lahan</Text>
-      <View style={styles.mapContainerCard}>
-        {Platform.OS !== 'web' && MapView ? (
-          <View style={{ flex: 1, position: 'relative' }}>
-            <MapView
-              style={styles.map}
-              initialRegion={{
-                latitude: centerCoord.latitude,
-                longitude: centerCoord.longitude,
-                latitudeDelta: 0.008,
-                longitudeDelta: 0.008,
-              }}
-            >
-              {/* Land Cover Overlays */}
-              {LAND_COVERS.map((lc) => (
-                <Polygon
-                  key={lc.id}
-                  coordinates={lc.coordinates}
-                  strokeColor="rgba(255,255,255,0.3)"
-                  fillColor={lc.fillColor}
-                  strokeWidth={1}
-                />
-              ))}
-
-              {polygonCoords.length > 0 && (
-                <Polygon
-                  coordinates={polygonCoords}
-                  fillColor="rgba(46, 125, 50, 0.25)"
-                  strokeColor={colors.primary}
-                  strokeWidth={2}
-                />
-              )}
-              <Marker
-                coordinate={{ latitude: centerCoord.latitude, longitude: centerCoord.longitude }}
-                title={lahan?.nama || "Demplot Lahan"}
-                description="Pusat Lokasi Budidaya Cabai Jawa"
-                pinColor="cream"
-              />
-            </MapView>
-
-            {/* Legend Overlay Card */}
-            <View style={styles.legendCard}>
-              <Text style={styles.legendTitle}>Tutupan Lahan Pancawati</Text>
-              {LAND_COVERS.map((lc) => (
-                <View key={lc.id} style={styles.legendRow}>
-                  <View style={[styles.legendIndicator, { backgroundColor: lc.color }]} />
-                  <Text style={styles.legendText}>{lc.name}</Text>
-                </View>
-              ))}
-              <View style={styles.legendRow}>
-                <View style={[styles.legendIndicator, { backgroundColor: colors.primary }]} />
-                <Text style={styles.legendText}>Demplot (Bedeng 1-16)</Text>
-              </View>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.webMapFallback}>
-            <Ionicons name="map-outline" size={32} color={colors.primary} />
-            <Text style={styles.webMapTitle}>Peta GIS Demplot ({lahan?.nama || 'Desa Pancawati'})</Text>
-            <Text style={styles.webMapSub}>
-              Pusat Koordinat: {centerCoord.latitude.toFixed(5)}, {centerCoord.longitude.toFixed(5)}
-            </Text>
-            <View style={styles.webBedengChipRow}>
-              {bedengs.map(b => (
-                <TouchableOpacity
-                  key={b.id}
-                  style={[styles.webBedengChip, selectedBedengId === b.id && styles.activeWebBedengChip]}
-                  onPress={() => handleSelectBedeng(b.id)}
-                >
-                  <Text style={[styles.webBedengChipText, selectedBedengId === b.id && styles.activeWebBedengChipText]}>
-                    📍 {b.nama || `Bedeng ${b.nomor_bedeng || b.id}`}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Legend Overlay for Web Fallback */}
-            <View style={styles.legendCard}>
-              <Text style={styles.legendTitle}>Tutupan Lahan Pancawati</Text>
-              {LAND_COVERS.map((lc) => (
-                <View key={lc.id} style={styles.legendRow}>
-                  <View style={[styles.legendIndicator, { backgroundColor: lc.color }]} />
-                  <Text style={styles.legendText}>{lc.name}</Text>
-                </View>
-              ))}
-              <View style={styles.legendRow}>
-                <View style={[styles.legendIndicator, { backgroundColor: colors.primary }]} />
-                <Text style={styles.legendText}>Demplot (Bedeng 1-16)</Text>
-              </View>
-            </View>
-          </View>
-        )}
       </View>
 
       {/* SECTION 2: MONITORING SENSOR */}
@@ -1138,67 +948,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
-  // Map Component Styles
-  mapContainerCard: {
-    height: 180,
-    backgroundColor: colors.card,
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-  },
-  map: {
-    width: '100%',
-    height: '100%',
-  },
-  webMapFallback: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: 'rgba(46, 125, 50, 0.05)',
-  },
-  webMapTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginTop: 6,
-  },
-  webMapSub: {
-    fontSize: 12,
-    color: colors.textMuted,
-    marginTop: 2,
-    marginBottom: 10,
-  },
-  webBedengChipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  webBedengChip: {
-    backgroundColor: colors.card,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  activeWebBedengChip: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
-  },
-  webBedengChipText: {
-    fontSize: 12,
-    color: colors.text,
-  },
-  activeWebBedengChipText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
+
 
   // Dropdown Button
   dropdownBtn: {
@@ -1669,45 +1419,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14,
   },
-  legendCard: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    borderRadius: 12,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    maxWidth: 160,
-  },
-  legendTitle: {
-    fontSize: 9,
-    fontWeight: 'bold',
-    color: colors.text,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  legendRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 3,
-  },
-  legendIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 2,
-    marginRight: 5,
-  },
-  legendText: {
-    fontSize: 8,
-    fontWeight: '600',
-    color: colors.text,
-  },
+
   stalenessBadge: {
     flexDirection: 'row',
     alignItems: 'center',
