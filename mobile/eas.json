@@ -13,7 +13,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://pantau-psi.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://pantau-psi.vercel.app/api"
       }
     },
     "production": {
@@ -21,7 +21,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://pantau-psi.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://pantau-psi.vercel.app/api"
       }
     }
   },
