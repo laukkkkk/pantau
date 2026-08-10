@@ -11,7 +11,8 @@ import {
   Modal,
   TextInput,
   Alert,
-  Platform
+  Platform,
+  KeyboardAvoidingView
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -780,112 +781,122 @@ export default function DashboardScreen() {
 
       {/* MODAL TAMBAH SIKLUS BARU */}
       <Modal animationType="slide" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Mulai Siklus Tanam Baru</Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Mulai Siklus Tanam Baru</Text>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.modalInputLabel}>Nama Siklus Tanam (min. 3 karakter)</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="Contoh: Demplot Cabai Blok A"
-                placeholderTextColor={colors.textMuted}
-                value={newSiklusNama}
-                onChangeText={setNewSiklusNama}
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.modalInputLabel}>Pilih Komoditas / Jenis Tanaman Baku:</Text>
-              <View style={styles.chipGroup}>
-                {KOMODITAS_OPTIONS.map((opt) => (
-                  <TouchableOpacity
-                    key={opt}
-                    style={[styles.chipBtn, selectedKomoditasOption === opt && styles.activeChipBtn]}
-                    onPress={() => setSelectedKomoditasOption(opt)}
-                  >
-                    <Text style={[styles.chipText, selectedKomoditasOption === opt && styles.activeChipText]}>
-                      {opt}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              {selectedKomoditasOption === 'Lainnya' && (
+              <View style={styles.formGroup}>
+                <Text style={styles.modalInputLabel}>Nama Siklus Tanam (min. 3 karakter)</Text>
                 <TextInput
-                  style={[styles.modalInput, { marginTop: 8 }]}
-                  placeholder="Ketik komoditas kustom..."
+                  style={styles.modalInput}
+                  placeholder="Contoh: Demplot Cabai Blok A"
                   placeholderTextColor={colors.textMuted}
-                  value={customKomoditasText}
-                  onChangeText={setCustomKomoditasText}
+                  value={newSiklusNama}
+                  onChangeText={setNewSiklusNama}
                 />
-              )}
-            </View>
+              </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.modalInputLabel}>Tanggal Mulai Tanam (YYYY-MM-DD)</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={colors.textMuted}
-                value={newSiklusTanggal}
-                onChangeText={setNewSiklusTanggal}
-              />
-            </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.modalInputLabel}>Pilih Komoditas / Jenis Tanaman Baku:</Text>
+                <View style={styles.chipGroup}>
+                  {KOMODITAS_OPTIONS.map((opt) => (
+                    <TouchableOpacity
+                      key={opt}
+                      style={[styles.chipBtn, selectedKomoditasOption === opt && styles.activeChipBtn]}
+                      onPress={() => setSelectedKomoditasOption(opt)}
+                    >
+                      <Text style={[styles.chipText, selectedKomoditasOption === opt && styles.activeChipText]}>
+                        {opt}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {selectedKomoditasOption === 'Lainnya' && (
+                  <TextInput
+                    style={[styles.modalInput, { marginTop: 8 }]}
+                    placeholder="Ketik komoditas kustom..."
+                    placeholderTextColor={colors.textMuted}
+                    value={customKomoditasText}
+                    onChangeText={setCustomKomoditasText}
+                  />
+                )}
+              </View>
 
-            <View style={styles.modalActionRow}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)} disabled={submitting}>
-                <Text style={styles.cancelBtnText}>Batal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.submitBtn} onPress={handleAddSiklusSubmit} disabled={submitting}>
-                {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.submitBtnText}>Simpan</Text>}
-              </TouchableOpacity>
+              <View style={styles.formGroup}>
+                <Text style={styles.modalInputLabel}>Tanggal Mulai Tanam (YYYY-MM-DD)</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={colors.textMuted}
+                  value={newSiklusTanggal}
+                  onChangeText={setNewSiklusTanggal}
+                />
+              </View>
+
+              <View style={styles.modalActionRow}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)} disabled={submitting}>
+                  <Text style={styles.cancelBtnText}>Batal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.submitBtn} onPress={handleAddSiklusSubmit} disabled={submitting}>
+                  {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.submitBtnText}>Simpan</Text>}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* MODAL TANDAI SIKLUS SELESAI */}
       <Modal animationType="slide" transparent={true} visible={finishModalVisible} onRequestClose={() => setFinishModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Tandai Siklus Selesai</Text>
-            <Text style={{ fontSize: 13, color: colors.textMuted, marginBottom: 14 }}>
-              Siklus: <Text style={{ fontWeight: 'bold', color: colors.text }}>{finishingSiklusItem?.nama}</Text>
-            </Text>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Tandai Siklus Selesai</Text>
+              <Text style={{ fontSize: 13, color: colors.textMuted, marginBottom: 14 }}>
+                Siklus: <Text style={{ fontWeight: 'bold', color: colors.text }}>{finishingSiklusItem?.nama}</Text>
+              </Text>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.modalInputLabel}>Hasil Panen Total (kg):</Text>
-              <TextInput
-                style={styles.modalInput}
-                keyboardType="numeric"
-                placeholder="Contoh: 1200"
-                placeholderTextColor={colors.textMuted}
-                value={hasilPanenInput}
-                onChangeText={setHasilPanenInput}
-              />
-            </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.modalInputLabel}>Hasil Panen Total (kg):</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  keyboardType="numeric"
+                  placeholder="Contoh: 1200"
+                  placeholderTextColor={colors.textMuted}
+                  value={hasilPanenInput}
+                  onChangeText={setHasilPanenInput}
+                />
+              </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.modalInputLabel}>Tanggal Panen / Selesai (YYYY-MM-DD):</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={colors.textMuted}
-                value={tanggalPanenInput}
-                onChangeText={setTanggalPanenInput}
-              />
-            </View>
+              <View style={styles.formGroup}>
+                <Text style={styles.modalInputLabel}>Tanggal Panen / Selesai (YYYY-MM-DD):</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={colors.textMuted}
+                  value={tanggalPanenInput}
+                  onChangeText={setTanggalPanenInput}
+                />
+              </View>
 
-            <View style={styles.modalActionRow}>
-              <TouchableOpacity style={styles.cancelBtn} onPress={() => setFinishModalVisible(false)} disabled={finishingSubmitting}>
-                <Text style={styles.cancelBtnText}>Batal</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.submitBtn} onPress={handleFinishSiklusSubmit} disabled={finishingSubmitting}>
-                {finishingSubmitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.submitBtnText}>Simpan Selesai</Text>}
-              </TouchableOpacity>
+              <View style={styles.modalActionRow}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => setFinishModalVisible(false)} disabled={finishingSubmitting}>
+                  <Text style={styles.cancelBtnText}>Batal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.submitBtn} onPress={handleFinishSiklusSubmit} disabled={finishingSubmitting}>
+                  {finishingSubmitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.submitBtnText}>Simpan Selesai</Text>}
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </ScrollView>
   );

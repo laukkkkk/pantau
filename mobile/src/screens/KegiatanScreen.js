@@ -10,7 +10,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   Platform,
-  Alert
+  Alert,
+  KeyboardAvoidingView
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -565,54 +566,59 @@ export default function KegiatanScreen() {
         visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Tambah Kegiatan Tani</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <Ionicons name="close" size={24} color={colors.text} />
-              </TouchableOpacity>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Tambah Kegiatan Tani</Text>
+                <TouchableOpacity onPress={() => setModalVisible(false)}>
+                  <Ionicons name="close" size={24} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalForm}>
+                <Text style={styles.inputLabel}>Nama Kegiatan</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Contoh: Pemupukan Susulan Urea"
+                  placeholderTextColor={colors.textMuted}
+                  value={namaKegiatan}
+                  onChangeText={setNamaKegiatan}
+                />
+
+                <Text style={styles.inputLabel}>Tanggal Kegiatan</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Format: YYYY-MM-DD (Contoh: 2026-07-20)"
+                  placeholderTextColor={colors.textMuted}
+                  value={tanggalKegiatan}
+                  onChangeText={setTanggalKegiatan}
+                />
+
+                <Text style={styles.inputLabel}>Deskripsi</Text>
+                <TextInput
+                  style={[styles.input, styles.textArea]}
+                  placeholder="Tuliskan catatan detail kegiatan tani..."
+                  placeholderTextColor={colors.textMuted}
+                  multiline={true}
+                  numberOfLines={3}
+                  value={deskripsiKegiatan}
+                  onChangeText={setDeskripsiKegiatan}
+                />
+
+                <TouchableOpacity
+                  style={styles.submitBtn}
+                  onPress={handleCreateJadwal}
+                >
+                  <Text style={styles.submitBtnText}>Simpan & Jadwalkan Alarm</Text>
+                </TouchableOpacity>
+              </ScrollView>
             </View>
-
-            <ScrollView style={styles.modalForm}>
-              <Text style={styles.inputLabel}>Nama Kegiatan</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Contoh: Pemupukan Susulan Urea"
-                placeholderTextColor={colors.textMuted}
-                value={namaKegiatan}
-                onChangeText={setNamaKegiatan}
-              />
-
-              <Text style={styles.inputLabel}>Tanggal Kegiatan</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Format: YYYY-MM-DD (Contoh: 2026-07-20)"
-                placeholderTextColor={colors.textMuted}
-                value={tanggalKegiatan}
-                onChangeText={setTanggalKegiatan}
-              />
-
-              <Text style={styles.inputLabel}>Deskripsi</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="Tuliskan catatan detail kegiatan tani..."
-                placeholderTextColor={colors.textMuted}
-                multiline={true}
-                numberOfLines={3}
-                value={deskripsiKegiatan}
-                onChangeText={setDeskripsiKegiatan}
-              />
-
-              <TouchableOpacity
-                style={styles.submitBtn}
-                onPress={handleCreateJadwal}
-              >
-                <Text style={styles.submitBtnText}>Simpan & Jadwalkan Alarm</Text>
-              </TouchableOpacity>
-            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

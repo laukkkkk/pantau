@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, Text, View, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, Linking, RefreshControl, Modal } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, Linking, RefreshControl, Modal, Platform, KeyboardAvoidingView } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { getSiklusList, updateSiklus, getBiayaList, createBiaya, updateBiaya, deleteBiaya, getLaporan, calculateLaporan, getPdfExportUrl } from '../services/api';
 import { colors } from '../theme/colors';
@@ -641,70 +641,77 @@ export default function AccountingScreen() {
 
       {/* COST MODAL FORM */}
       <Modal visible={isFormVisible} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{editingBiayaId ? 'Edit Catatan Biaya' : 'Catat Biaya Produksi Baru'}</Text>
-            
-            {/* Category selection chip group */}
-            <Text style={styles.inputLabel}>Pilih Kategori:</Text>
-            <View style={styles.chipGroup}>
-              {CATEGORIES.map((cat) => (
-                <TouchableOpacity
-                  key={cat}
-                  style={[styles.chipBtn, selectedCategory === cat && styles.activeChipBtn]}
-                  onPress={() => setSelectedCategory(cat)}
-                >
-                  <Text style={[styles.chipText, selectedCategory === cat && styles.activeChipText]}>
-                    {cat}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ flexGrow: 1 }}>
+                <Text style={styles.modalTitle}>{editingBiayaId ? 'Edit Catatan Biaya' : 'Catat Biaya Produksi Baru'}</Text>
+                
+                {/* Category selection chip group */}
+                <Text style={styles.inputLabel}>Pilih Kategori:</Text>
+                <View style={styles.chipGroup}>
+                  {CATEGORIES.map((cat) => (
+                    <TouchableOpacity
+                      key={cat}
+                      style={[styles.chipBtn, selectedCategory === cat && styles.activeChipBtn]}
+                      onPress={() => setSelectedCategory(cat)}
+                    >
+                      <Text style={[styles.chipText, selectedCategory === cat && styles.activeChipText]}>
+                        {cat}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.inputLabel}>Deskripsi / Nama Rincian Pengeluaran</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Contoh: Pupuk Urea 50kg, Upah Harian Penyiangan"
-                placeholderTextColor={colors.textMuted}
-                value={deskripsi}
-                onChangeText={setDeskripsi}
-              />
-            </View>
+                <View style={styles.formGroup}>
+                  <Text style={styles.inputLabel}>Deskripsi / Nama Rincian Pengeluaran</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Contoh: Pupuk Urea 50kg, Upah Harian Penyiangan"
+                    placeholderTextColor={colors.textMuted}
+                    value={deskripsi}
+                    onChangeText={setDeskripsi}
+                  />
+                </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.inputLabel}>Jumlah Pengeluaran (Rp)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Contoh: 150000"
-                placeholderTextColor={colors.textMuted}
-                keyboardType="numeric"
-                value={jumlah}
-                onChangeText={setJumlah}
-              />
-            </View>
+                <View style={styles.formGroup}>
+                  <Text style={styles.inputLabel}>Jumlah Pengeluaran (Rp)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Contoh: 150000"
+                    placeholderTextColor={colors.textMuted}
+                    keyboardType="numeric"
+                    value={jumlah}
+                    onChangeText={setJumlah}
+                  />
+                </View>
 
-            <View style={styles.formGroup}>
-              <Text style={styles.inputLabel}>Tanggal Pengeluaran (YYYY-MM-DD)</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Contoh: 2026-07-15"
-                placeholderTextColor={colors.textMuted}
-                value={tanggal}
-                onChangeText={setTanggal}
-              />
-            </View>
+                <View style={styles.formGroup}>
+                  <Text style={styles.inputLabel}>Tanggal Pengeluaran (YYYY-MM-DD)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Contoh: 2026-07-15"
+                    placeholderTextColor={colors.textMuted}
+                    value={tanggal}
+                    onChangeText={setTanggal}
+                  />
+                </View>
 
-            <View style={styles.btnRow}>
-              <TouchableOpacity style={[styles.submitBtn, { flex: 1, marginRight: 10 }]} onPress={handleSaveBiaya} disabled={actionLoading}>
-                <Text style={styles.submitBtnText}>{editingBiayaId ? 'Update' : 'Simpan Transaksi'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.cancelBtn} onPress={handleCancelEdit}>
-                <Text style={styles.cancelBtnText}>Batal</Text>
-              </TouchableOpacity>
+                <View style={styles.btnRow}>
+                  <TouchableOpacity style={[styles.submitBtn, { flex: 1, marginRight: 10 }]} onPress={handleSaveBiaya} disabled={actionLoading}>
+                    <Text style={styles.submitBtnText}>{editingBiayaId ? 'Update' : 'Simpan Transaksi'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.cancelBtn} onPress={handleCancelEdit}>
+                    <Text style={styles.cancelBtnText}>Batal</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </ScrollView>
   );
