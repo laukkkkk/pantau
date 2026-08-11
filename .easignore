@@ -1,0 +1,4 @@
+# Ignore non-mobile services for EAS builds
+backend/
+ai-service/
+iot/

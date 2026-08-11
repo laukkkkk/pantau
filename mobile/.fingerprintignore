@@ -1,0 +1,17 @@
+# Ignore directories that do not affect the native build
+assets/**/*
+dist/**/*
+web-build/**/*
+docs/**/*
+
+# Ignore temporary and IDE files
+.expo/**/*
+.vscode/**/*
+*.md
+*.log
+temp/**/*
+
+# Ignore sibling project directories to prevent fingerprint tool from traversing outside the mobile app scope
+../backend/**/*
+../ai-service/**/*
+../iot/**/*

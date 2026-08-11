@@ -35,3 +35,15 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+
+# Sibling projects heavy directories
+backend/node_modules/
+backend/uploads/*
+!backend/uploads/Buku_Saku_Cabe_Jawa_Gabungan.pdf
+ai-service/venv/
+ai-service/.venv/
+ai-service/dataset/
+ai-service/models/
+ai-service/__pycache__/
+*.py[cod]
+
