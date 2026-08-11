@@ -229,7 +229,7 @@ export default function ScanHamaScreen() {
             {scanning && (
               <View style={styles.scanOverlay}>
                 <ActivityIndicator size="large" color={colors.primary} />
-                <Text style={styles.overlayText}>Menganalisis Citra Daun...</Text>
+                <Text style={styles.overlayText}>Menganalisis foto, mohon tunggu...</Text>
               </View>
             )}
 

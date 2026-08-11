@@ -587,6 +587,7 @@ export const createDeteksiHama = async (imageUri, latitude, longitude) => {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 45000,
     });
     
     return {
