@@ -71,16 +71,10 @@ const FAQS = [
 
 const CONTACTS = [
   {
-    name: 'Budi Santoso, S.P.',
-    role: 'Penyuluh Pertanian Lapangan',
-    phone: '+6281234567890',
+    name: 'Pak Yus Ketua Poktan Sugih Mukti 1',
+    role: 'Ketua Kelompok Tani',
+    phone: '+62 858-1325-1299',
     avatarColor: colors.primaryLight
-  },
-  {
-    name: 'Siti Rahma',
-    role: 'Koordinator Lapangan Ormawa',
-    phone: '+6289876543210',
-    avatarColor: colors.secondary
   }
 ];
 
@@ -117,7 +111,8 @@ export default function EdukasiScreen() {
 
   const handleContactWhatsApp = (phoneNumber, name) => {
     const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
-    const message = `Halo Kak ${name}, saya ingin berkonsultasi mengenai budidaya tanaman Cabai Jawa di program Pantau Ormawa.`;
+    const salutation = name.startsWith('Pak') || name.startsWith('Ibu') || name.startsWith('Dr.') ? '' : 'Kak ';
+    const message = `Halo ${salutation}${name}, saya ingin berkonsultasi mengenai budidaya tanaman Cabai Jawa di program Pantau Ormawa.`;
     const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
 
     Linking.openURL(url).catch((err) => {

@@ -397,9 +397,6 @@ export default function ScanHamaScreen() {
                         {diagInfo.badgeText}
                       </Text>
                     </View>
-                    <Text style={styles.coordinatesText}>
-                      Posisi: {item.koordinat?.coordinates ? `${item.koordinat.coordinates[0].toFixed(4)}, ${item.koordinat.coordinates[1].toFixed(4)}` : 'Koordinat default'}
-                    </Text>
                   </View>
                 </View>
               </View>
@@ -725,9 +722,5 @@ const styles = StyleSheet.create({
   smallBadgeText: {
     fontSize: 10,
     fontWeight: 'bold',
-  },
-  coordinatesText: {
-    fontSize: 11,
-    color: colors.textMuted,
   },
 });

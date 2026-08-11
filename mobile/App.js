@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import { View, Text, Image } from 'react-native';
 
 import DashboardScreen from './src/screens/DashboardScreen';
 import AccountingScreen from './src/screens/AccountingScreen';
@@ -51,10 +52,18 @@ export default function App() {
             elevation: 1,
             shadowOpacity: 0.1,
           },
-          headerTitleStyle: {
-            fontWeight: 'bold',
-            color: colors.text,
-          },
+          headerTitle: () => (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Image 
+                source={require('./assets/pantau.png')} 
+                style={{ width: 26, height: 26, marginRight: 8 }} 
+                resizeMode="contain"
+              />
+              <Text style={{ fontWeight: 'bold', fontSize: 18, color: colors.text }}>
+                {route.name}
+              </Text>
+            </View>
+          ),
         })}
       >
         <Tab.Screen name="Dashboard" component={DashboardScreen} />
