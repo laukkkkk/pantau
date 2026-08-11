@@ -103,6 +103,10 @@ export default function ScanHamaScreen() {
   useFocusEffect(
     useCallback(() => {
       fetchHistory();
+      return () => {
+        setSelectedImage(null);
+        setResult(null);
+      };
     }, [])
   );
 
@@ -124,6 +128,9 @@ export default function ScanHamaScreen() {
           onPress: async () => {
             const res = await deleteDeteksiHama(id);
             if (res.success) {
+              if (result && result.id === id) {
+                clearCurrent();
+              }
               fetchHistory();
             } else {
               Alert.alert('Gagal', res.error || 'Gagal menghapus riwayat deteksi.');
