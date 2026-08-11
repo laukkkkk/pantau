@@ -173,12 +173,12 @@ export default function KegiatanScreen() {
         trigger,
       });
 
-      Alert.alert('Sukses Penjadwalan', `Berhasil mendaftarkan alarm pengingat. ${noteMsg}`);
+      Alert.alert('Sukses Penjadwalan', 'Jadwal dan alarm pengingat berhasil disimpan.');
     } catch (error) {
       console.warn('Gagal menjadwalkan notifikasi (Expo Go/Native limitation):', error.message);
       Alert.alert(
         'Info Penjadwalan',
-        `Jadwal berhasil disimpan. (Catatan: Fitur notifikasi alarm fisik terbatas saat testing via Expo Go, tetapi akan berjalan di build APK produksi/Development Build).`
+        'Jadwal berhasil disimpan.'
       );
     }
   };

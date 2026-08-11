@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, Image, TouchableOpacity, ActivityIndicator, Alert, RefreshControl, Dimensions } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, withAlpha } from '../theme/colors';
 import { createDeteksiHama, getDeteksiHamaList, deleteDeteksiHama } from '../services/api';
@@ -173,9 +174,21 @@ export default function ScanHamaScreen() {
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      const uri = result.assets[0].uri;
-      setSelectedImage(uri);
-      handleScan(uri);
+      const originalUri = result.assets[0].uri;
+      try {
+        const filename = originalUri.split('/').pop().replace(/%/g, '_');
+        const newUri = `${FileSystem.documentDirectory}${filename}`;
+        await FileSystem.copyAsync({
+          from: originalUri,
+          to: newUri
+        });
+        setSelectedImage(newUri);
+        handleScan(newUri);
+      } catch (err) {
+        console.warn('Gagal copy file camera:', err.message);
+        setSelectedImage(originalUri);
+        handleScan(originalUri);
+      }
     }
   };
 
@@ -190,9 +203,21 @@ export default function ScanHamaScreen() {
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      const uri = result.assets[0].uri;
-      setSelectedImage(uri);
-      handleScan(uri);
+      const originalUri = result.assets[0].uri;
+      try {
+        const filename = originalUri.split('/').pop().replace(/%/g, '_');
+        const newUri = `${FileSystem.documentDirectory}${filename}`;
+        await FileSystem.copyAsync({
+          from: originalUri,
+          to: newUri
+        });
+        setSelectedImage(newUri);
+        handleScan(newUri);
+      } catch (err) {
+        console.warn('Gagal copy file gallery:', err.message);
+        setSelectedImage(originalUri);
+        handleScan(originalUri);
+      }
     }
   };
 
