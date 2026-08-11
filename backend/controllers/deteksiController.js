@@ -114,14 +114,24 @@ exports.createDeteksi = async (req, res, next) => {
       }
     }
 
-    // 5. Upload file ke Vercel Blob
+    // 5. Upload file ke Vercel Blob (atau fallback jika token tidak ada)
     const cleanName = req.file.originalname.replace(/\s+/g, '_');
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const filename = `deteksi_${uniqueSuffix}_${cleanName}`;
-    const blobResult = await put(filename, req.file.buffer, {
-      access: 'public',
-    });
-    const foto_url = blobResult.url;
+    let foto_url = 'https://images.unsplash.com/photo-1592417817098-8f3d6eb19675?w=500'; // fallback chili photo
+
+    if (process.env.BLOB_READ_WRITE_TOKEN) {
+      try {
+        const blobResult = await put(filename, req.file.buffer, {
+          access: 'public',
+        });
+        foto_url = blobResult.url;
+      } catch (err) {
+        console.warn('⚠️ Gagal upload ke Vercel Blob, menggunakan fallback:', err.message);
+      }
+    } else {
+      console.warn('⚠️ BLOB_READ_WRITE_TOKEN tidak diset. Menggunakan foto fallback untuk local testing.');
+    }
 
     // 6. Simpan log deteksi ke Database
     const docRef = DeteksiHama.doc();

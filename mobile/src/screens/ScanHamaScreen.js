@@ -558,12 +558,15 @@ const styles = StyleSheet.create({
   resultTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
+    marginRight: 8,
   },
   resultPestName: {
     fontSize: 18,
     fontWeight: 'bold',
     color: colors.text,
     marginLeft: 10,
+    flexShrink: 1,
   },
   badge: {
     paddingHorizontal: 10,
