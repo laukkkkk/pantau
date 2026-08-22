@@ -6,9 +6,7 @@ import json
 # Map folder names to expected classification labels returned by FastAPI
 FOLDER_TO_LABEL = {
     "healthy": "Daun Sehat",
-    "leaf curl": "Keriting Daun (Leaf Curl)",
     "leaf spot": "Bercak Daun (Leaf Spot)",
-    "whitefly": "Kutu Kebul (Whitefly)",
     "yellowish": "Daun Menguning (Yellowish)"
 }
 

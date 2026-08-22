@@ -53,16 +53,8 @@ exports.createDeteksi = async (req, res, next) => {
           rekomendasi: "Tanaman cabai jawa dalam kondisi sehat dan prima. Lakukan pemeliharaan rutin, penyiraman yang stabil, serta pemupukan berimbang secara berkala."
         },
         {
-          hasil_klasifikasi: "Keriting Daun (Leaf Curl)",
-          rekomendasi: "Semprot dengan insektisida berbahan aktif abamektin atau imidakloprid untuk mengendalikan hama pembawa virus (thrips/kutu daun). Singkirkan gulma di sekitar tanaman."
-        },
-        {
           hasil_klasifikasi: "Bercak Daun (Leaf Spot)",
           rekomendasi: "Semprot dengan fungisida berbahan aktif tembaga hidroksida atau mankozeb. Kurangi kelembaban dengan memperbaiki sirkulasi udara dan pangkas daun yang terinfeksi."
-        },
-        {
-          hasil_klasifikasi: "Kutu Kebul (Whitefly)",
-          rekomendasi: "Pasang perangkap kuning berperekat di sekitar bedeng. Semprot dengan insektisida nabati (seperti ekstrak daun mimba) atau insektisida kimia sistemik jika serangan parah."
         },
         {
           hasil_klasifikasi: "Daun Menguning (Yellowish)",
@@ -73,14 +65,10 @@ exports.createDeteksi = async (req, res, next) => {
       let selectedDiagnosis = null;
       if (filename.includes('healthy') || filename.includes('sehat')) {
         selectedDiagnosis = FALLBACK_DIAGNOSES[0];
-      } else if (filename.includes('curl') || filename.includes('keriting')) {
-        selectedDiagnosis = FALLBACK_DIAGNOSES[1];
       } else if (filename.includes('spot') || filename.includes('bercak')) {
-        selectedDiagnosis = FALLBACK_DIAGNOSES[2];
-      } else if (filename.includes('whitefly') || filename.includes('kutu') || filename.includes('kebul')) {
-        selectedDiagnosis = FALLBACK_DIAGNOSES[3];
+        selectedDiagnosis = FALLBACK_DIAGNOSES[1];
       } else if (filename.includes('yellow') || filename.includes('kuning')) {
-        selectedDiagnosis = FALLBACK_DIAGNOSES[4];
+        selectedDiagnosis = FALLBACK_DIAGNOSES[2];
       } else {
         const randomIdx = Math.floor(Math.random() * FALLBACK_DIAGNOSES.length);
         selectedDiagnosis = FALLBACK_DIAGNOSES[randomIdx];
@@ -89,11 +77,13 @@ exports.createDeteksi = async (req, res, next) => {
       aiResponse = {
         hasil_klasifikasi: selectedDiagnosis.hasil_klasifikasi,
         confidence: 0.88,
-        rekomendasi: selectedDiagnosis.rekomendasi
+        rekomendasi: selectedDiagnosis.rekomendasi,
+        is_confident: true,
+        is_fallback: true
       };
     }
 
-    const { hasil_klasifikasi, confidence, rekomendasi } = aiResponse;
+    const { hasil_klasifikasi, confidence, rekomendasi, is_confident, is_fallback } = aiResponse;
 
     // 3. Petakan tingkat_bahaya
     let tingkat_bahaya = 'RENDAH';
@@ -160,7 +150,9 @@ exports.createDeteksi = async (req, res, next) => {
         timestamp: newDeteksi.timestamp,
         ai_details: {
           confidence,
-          rekomendasi
+          rekomendasi,
+          is_confident: is_confident !== undefined ? is_confident : true,
+          is_fallback: is_fallback !== undefined ? is_fallback : false
         }
       }
     });

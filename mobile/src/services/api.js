@@ -216,6 +216,26 @@ export const deleteSiklus = async (id) => {
   }
 };
 
+/**
+ * Gets the connected season chain for a given planting cycle ID.
+ * Hit GET /api/siklus-tanam/:id/rantai
+ */
+export const getSiklusChain = async (id) => {
+  try {
+    const response = await api.get(`/siklus-tanam/${id}/rantai`);
+    return {
+      success: true,
+      data: response.data.data
+    };
+  } catch (error) {
+    console.warn('API getSiklusChain failed:', error.message);
+    return {
+      success: false,
+      error: error.response ? error.response.data.message : error.message
+    };
+  }
+};
+
 
 /**
  * Gets the list of production costs.

@@ -1,16 +1,23 @@
 const { SensorData, SiklusTanam, BiayaProduksi } = require('../models');
 
 // Helper to format siklus object consistently with siklusController
-const formatSiklusItem = (raw) => {
+const formatSiklusItem = (raw, nameMap = null) => {
   if (!raw) return null;
   const rawStatus = (raw.status || 'berjalan').toString().toLowerCase();
   const isBerjalan = rawStatus === 'berjalan' || rawStatus === 'aktif';
   const statusStr = isBerjalan ? 'berjalan' : 'selesai';
+  const prevId = raw.musim_sebelumnya_id || null;
+  let prevNama = raw.musim_sebelumnya_nama || null;
+  if (prevId && nameMap && nameMap.has(String(prevId))) {
+    prevNama = nameMap.get(String(prevId));
+  }
   return {
     ...raw,
     status: statusStr,
     tanggal_tanam: raw.tanggal_mulai,
-    tanggal_panen: raw.tanggal_selesai
+    tanggal_panen: raw.tanggal_selesai,
+    musim_sebelumnya_id: prevId,
+    musim_sebelumnya_nama: prevNama
   };
 };
 
@@ -27,8 +34,11 @@ exports.getRingkasan = async (req, res, next) => {
     // 2. Dapatkan seluruh siklus tanam dari database
     const allSiklusSnapshot = await SiklusTanam.get();
     const allSiklusList = [];
+    const nameMap = new Map();
     allSiklusSnapshot.forEach(doc => {
-      allSiklusList.push(doc.data());
+      const d = doc.data();
+      allSiklusList.push(d);
+      nameMap.set(String(d.id), d.nama);
     });
     // Sort by tanggal_mulai DESC in-memory
     allSiklusList.sort((a, b) => new Date(b.tanggal_mulai) - new Date(a.tanggal_mulai));
@@ -41,6 +51,12 @@ exports.getRingkasan = async (req, res, next) => {
 
     const siklusAktif = activeSiklusList.length > 0 ? activeSiklusList[0] : null;
     const totalSiklusAktif = activeSiklusList.length;
+
+    // Filter histori siklus (hanya musim yang berstatus selesai)
+    const finishedSiklusList = allSiklusList.filter(s => {
+      const st = (s.status || '').toString().toLowerCase();
+      return st !== 'berjalan' && st !== 'aktif';
+    });
 
     // 4. Hitung total biaya produksi pada bulan berjalan ini
     const now = new Date();
@@ -61,10 +77,11 @@ exports.getRingkasan = async (req, res, next) => {
       success: true,
       data: {
         sensor_terbaru: sensorTerbaru,
-        siklus_aktif: formatSiklusItem(siklusAktif),
+        siklus_aktif: formatSiklusItem(siklusAktif, nameMap),
+        siklus_aktif_list: activeSiklusList.map(item => formatSiklusItem(item, nameMap)),
         total_siklus_aktif: totalSiklusAktif,
         total_biaya_bulan_ini: totalBiayaBulanIni,
-        siklus_history: allSiklusList.map(formatSiklusItem)
+        siklus_history: finishedSiklusList.map(item => formatSiklusItem(item, nameMap))
       }
     });
   } catch (error) {

@@ -67,12 +67,30 @@ exports.updateDeviceAssignment = async (req, res, next) => {
 
     // Validasi format bedeng_id jika diisi
     if (bedeng_id !== "" && bedeng_id !== null) {
-      const bNum = parseInt(bedeng_id);
+      const bNum = parseInt(bedeng_id, 10);
       if (isNaN(bNum) || bNum < 1 || bNum > 16) {
         return res.status(400).json({
           success: false,
           message: 'Nomor bedeng tidak valid (harus berada di rentang 1-16).'
         });
+      }
+
+      // Validasi pembatasan range per device
+      const cleanDevId = String(deviceId).toUpperCase();
+      if (cleanDevId === 'SN-1' || cleanDevId.endsWith('SN-1')) {
+        if (bNum < 1 || bNum > 8) {
+          return res.status(400).json({
+            success: false,
+            message: 'Device SN-1 hanya bisa ditempatkan di Bedeng 1-8.'
+          });
+        }
+      } else if (cleanDevId === 'SN-2' || cleanDevId.endsWith('SN-2')) {
+        if (bNum < 9 || bNum > 16) {
+          return res.status(400).json({
+            success: false,
+            message: 'Device SN-2 hanya bisa ditempatkan di Bedeng 9-16.'
+          });
+        }
       }
     }
 

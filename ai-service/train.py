@@ -12,7 +12,8 @@ from PIL import Image
 import numpy as np
 
 # Define classes
-CLASSES = ["healthy", "leaf curl", "leaf spot", "whitefly", "yellowish"]
+# Define classes
+CLASSES = ["healthy", "leaf spot", "yellowish"]
 
 class SyntheticPestDataset(Dataset):
     def __init__(self, num_samples_per_class=50, transform=None):
@@ -23,11 +24,9 @@ class SyntheticPestDataset(Dataset):
         
         # Color signatures for our synthetic classes:
         # Class 0: healthy (Bright Green)
-        # Class 1: leaf curl (Wilted Dark Olive/Grayish Green)
-        # Class 2: leaf spot (Brownish/Green spots)
-        # Class 3: whitefly (Yellowish/Greenish dots)
-        # Class 4: yellowish (Pale Yellowish Green)
-        for class_idx in range(5):
+        # Class 1: leaf spot (Brownish/Green spots)
+        # Class 2: yellowish (Pale Yellowish Green)
+        for class_idx in range(3):
             for _ in range(num_samples_per_class):
                 # Create a 224x224 RGB image
                 img_data = np.zeros((224, 224, 3), dtype=np.uint8)
@@ -39,21 +38,11 @@ class SyntheticPestDataset(Dataset):
                     img_data[:, :, 1] = 139
                     img_data[:, :, 2] = 34
                 elif class_idx == 1:
-                    # Dark Olive/Grayish Green: R=85, G=107, B=47
-                    img_data[:, :, 0] = 85
-                    img_data[:, :, 1] = 107
-                    img_data[:, :, 2] = 47
-                elif class_idx == 2:
                     # Brown: R=139, G=69, B=19
                     img_data[:, :, 0] = 139
                     img_data[:, :, 1] = 69
                     img_data[:, :, 2] = 19
-                elif class_idx == 3:
-                    # Yellow/Green: R=218, G=165, B=32
-                    img_data[:, :, 0] = 218
-                    img_data[:, :, 1] = 165
-                    img_data[:, :, 2] = 32
-                elif class_idx == 4:
+                elif class_idx == 2:
                     # Pale Yellow: R=200, G=200, B=50
                     img_data[:, :, 0] = 200
                     img_data[:, :, 1] = 200
@@ -86,8 +75,10 @@ def train_model():
     
     # Transforms
     train_transform = transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
         transforms.RandomHorizontalFlip(),
+        transforms.RandomRotation(degrees=15),
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
@@ -127,6 +118,7 @@ def train_model():
     print("Loading pretrained MobileNetV3-Small architecture...")
     try:
         # Modern PyTorch API
+        # pyrefly: ignore [missing-import]
         from torchvision.models import mobilenet_v3_small, MobileNet_V3_Small_Weights
         model = mobilenet_v3_small(weights=MobileNet_V3_Small_Weights.DEFAULT)
     except Exception:
@@ -137,9 +129,9 @@ def train_model():
     for param in model.parameters():
         param.requires_grad = False
         
-    # Replace classifier head for 5 classes
+    # Replace classifier head for 3 classes
     num_features = model.classifier[3].in_features
-    model.classifier[3] = nn.Linear(num_features, 5)
+    model.classifier[3] = nn.Linear(num_features, 3)
     
     # Ensure classifier parameters are trainable
     for param in model.classifier.parameters():

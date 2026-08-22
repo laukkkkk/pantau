@@ -16,21 +16,9 @@ const DIAGNOSES_MAP = {
     color: colors.success,
     badgeText: 'NORMAL / AMAN'
   },
-  'Keriting Daun (Leaf Curl)': {
-    rekomendasi: 'Semprot dengan insektisida berbahan aktif abamektin atau imidakloprid untuk mengendalikan hama pembawa virus (thrips/kutu daun). Singkirkan gulma di sekitar tanaman.',
-    icon: 'warning',
-    color: colors.danger,
-    badgeText: 'BAHAYA TINGGI'
-  },
   'Bercak Daun (Leaf Spot)': {
     rekomendasi: 'Semprot dengan fungisida berbahan aktif tembaga hidroksida atau mankozeb. Kurangi kelembaban dengan memperbaiki sirkulasi udara dan pangkas daun yang terinfeksi.',
     icon: 'warning',
-    color: colors.warning,
-    badgeText: 'BAHAYA SEDANG'
-  },
-  'Kutu Kebul (Whitefly)': {
-    rekomendasi: 'Pasang perangkap kuning berperekat di sekitar bedeng. Semprot dengan insektisida nabati (seperti ekstrak daun mimba) atau insektisida kimia sistemik jika serangan parah.',
-    icon: 'bug',
     color: colors.warning,
     badgeText: 'BAHAYA SEDANG'
   },
@@ -294,53 +282,87 @@ export default function ScanHamaScreen() {
       {/* Detection Result Details */}
       {result && (
         <View style={styles.resultCard}>
-          <View style={styles.resultHeader}>
-            <View style={styles.resultTitleRow}>
-              <Ionicons 
-                name={DIAGNOSES_MAP[result.nama_hama]?.icon || 'help-circle'} 
-                size={24} 
-                color={DIAGNOSES_MAP[result.nama_hama]?.color || colors.primary} 
-              />
-              <Text style={styles.resultPestName}>{result.nama_hama}</Text>
-            </View>
-            <View style={[
-              styles.badge, 
-              { backgroundColor: withAlpha(DIAGNOSES_MAP[result.nama_hama]?.color || colors.primary, 0.15) }
-            ]}>
-              <Text style={[styles.badgeText, { color: DIAGNOSES_MAP[result.nama_hama]?.color }]}>
-                {DIAGNOSES_MAP[result.nama_hama]?.badgeText || result.tingkat_bahaya}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.divider} />
-
-          {/* Confidence Slider Indicator */}
-          {result.ai_details?.confidence !== undefined && (
-            <View style={styles.confSection}>
-              <View style={styles.confTextRow}>
-                <Text style={styles.confLabel}>Tingkat Keyakinan AI:</Text>
-                <Text style={styles.confValue}>{Math.round(result.ai_details.confidence * 100)}%</Text>
+          {result.ai_details?.is_confident === false ? (
+            // Low Confidence Warning View
+            <View>
+              <View style={styles.resultHeader}>
+                <View style={styles.resultTitleRow}>
+                  <Ionicons name="alert-circle" size={24} color={colors.warning} />
+                  <Text style={styles.resultPestName}>{result.nama_hama}</Text>
+                </View>
+                <View style={[styles.badge, { backgroundColor: withAlpha(colors.warning, 0.15) }]}>
+                  <Text style={[styles.badgeText, { color: colors.warning }]}>PERLU FOTO ULANG</Text>
+                </View>
               </View>
-              <View style={styles.progressBarBg}>
-                <View style={[
-                  styles.progressBarFill, 
-                  { 
-                    width: `${result.ai_details.confidence * 100}%`,
-                    backgroundColor: DIAGNOSES_MAP[result.nama_hama]?.color || colors.primary 
-                  }
-                ]} />
+
+              <View style={styles.divider} />
+
+              <View style={[styles.recomSection, { borderLeftColor: colors.warning, backgroundColor: withAlpha(colors.warning, 0.08) }]}>
+                <Text style={[styles.recomLabel, { color: colors.warning }]}>Petunjuk Pengambilan Foto:</Text>
+                <Text style={styles.recomText}>
+                  {result.ai_details?.rekomendasi || 'Foto kurang jelas atau posisi daun terlalu jauh. Silakan ambil foto ulang dengan pencahayaan terang dan lebih dekat ke permukaan daun.'}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            // Normal Confidence Result View
+            <View>
+              <View style={styles.resultHeader}>
+                <View style={styles.resultTitleRow}>
+                  <Ionicons 
+                    name={DIAGNOSES_MAP[result.nama_hama]?.icon || 'help-circle'} 
+                    size={24} 
+                    color={DIAGNOSES_MAP[result.nama_hama]?.color || colors.primary} 
+                  />
+                  <Text style={styles.resultPestName}>{result.nama_hama}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  {result.ai_details?.is_fallback && (
+                    <View style={[styles.badge, { backgroundColor: withAlpha(colors.textMuted, 0.15) }]}>
+                      <Text style={[styles.badgeText, { color: colors.textMuted }]}>Mode Cadangan</Text>
+                    </View>
+                  )}
+                  <View style={[
+                    styles.badge, 
+                    { backgroundColor: withAlpha(DIAGNOSES_MAP[result.nama_hama]?.color || colors.primary, 0.15) }
+                  ]}>
+                    <Text style={[styles.badgeText, { color: DIAGNOSES_MAP[result.nama_hama]?.color }]}>
+                      {DIAGNOSES_MAP[result.nama_hama]?.badgeText || result.tingkat_bahaya}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.divider} />
+
+              {/* Confidence Slider Indicator */}
+              {result.ai_details?.confidence !== undefined && (
+                <View style={styles.confSection}>
+                  <View style={styles.confTextRow}>
+                    <Text style={styles.confLabel}>Tingkat Keyakinan AI:</Text>
+                    <Text style={styles.confValue}>{Math.round(result.ai_details.confidence * 100)}%</Text>
+                  </View>
+                  <View style={styles.progressBarBg}>
+                    <View style={[
+                      styles.progressBarFill, 
+                      { 
+                        width: `${result.ai_details.confidence * 100}%`,
+                        backgroundColor: DIAGNOSES_MAP[result.nama_hama]?.color || colors.primary 
+                      }
+                    ]} />
+                  </View>
+                </View>
+              )}
+
+              {/* Recommendation */}
+              <View style={styles.recomSection}>
+                <Text style={styles.recomLabel}>Rekomendasi Penanganan:</Text>
+                <Text style={styles.recomText}>
+                  {result.ai_details?.rekomendasi || DIAGNOSES_MAP[result.nama_hama]?.rekomendasi || 'Lakukan pengamatan lapangan lanjutan.'}
+                </Text>
               </View>
             </View>
           )}
-
-          {/* Recommendation */}
-          <View style={styles.recomSection}>
-            <Text style={styles.recomLabel}>Rekomendasi Penanganan:</Text>
-            <Text style={styles.recomText}>
-              {result.ai_details?.rekomendasi || DIAGNOSES_MAP[result.nama_hama]?.rekomendasi || 'Lakukan pengamatan lapangan lanjutan.'}
-            </Text>
-          </View>
         </View>
       )}
 

@@ -3,23 +3,103 @@ const { calculateHPPAndProfit } = require('../utils/finance');
 const PDFDocument = require('pdfkit');
 
 /**
+ * Helper to calculate cumulative financial carry-over from preceding seasons in the chain
+ */
+const calculateCumulativeChainFinance = async (siklusId) => {
+  const allSiklusSnapshot = await SiklusTanam.get();
+  const mapById = new Map();
+  allSiklusSnapshot.forEach(doc => {
+    mapById.set(String(doc.id), doc.data());
+  });
+
+  const targetSeason = mapById.get(String(siklusId));
+  if (!targetSeason || !targetSeason.musim_sebelumnya_id) {
+    return {
+      has_parent: false,
+      saldo_kumulatif_sebelumnya: 0,
+      rantai_musim_sebelumnya: []
+    };
+  }
+
+  // Trace backwards from targetSeason.musim_sebelumnya_id
+  const precedingChain = [];
+  let currId = String(targetSeason.musim_sebelumnya_id);
+  const visited = new Set();
+
+  while (currId && mapById.has(currId) && !visited.has(currId)) {
+    visited.add(currId);
+    precedingChain.unshift(mapById.get(currId)); // Place oldest parent first
+    const curr = mapById.get(currId);
+    currId = curr.musim_sebelumnya_id ? String(curr.musim_sebelumnya_id) : null;
+  }
+
+  if (precedingChain.length === 0) {
+    return {
+      has_parent: false,
+      saldo_kumulatif_sebelumnya: 0,
+      rantai_musim_sebelumnya: []
+    };
+  }
+
+  // Pre-fetch all LaporanKeuangan and BiayaProduksi for flexible string ID matching
+  const allLaporanSnap = await LaporanKeuangan.get();
+  const laporanBySiklusMap = new Map();
+  allLaporanSnap.forEach(doc => {
+    const data = doc.data();
+    if (data.siklus_id !== undefined) {
+      laporanBySiklusMap.set(String(data.siklus_id), data);
+    }
+  });
+
+  const allBiayaSnap = await BiayaProduksi.get();
+  const biayaSumBySiklusMap = new Map();
+  allBiayaSnap.forEach(doc => {
+    const data = doc.data();
+    if (data.siklus_id !== undefined) {
+      const sIdStr = String(data.siklus_id);
+      const currentVal = biayaSumBySiklusMap.get(sIdStr) || 0;
+      biayaSumBySiklusMap.set(sIdStr, currentVal + (parseFloat(data.jumlah) || 0));
+    }
+  });
+
+  let saldoKumulatifSebelumnya = 0;
+  const rantaiMusimSebelumnya = [];
+
+  for (const s of precedingChain) {
+    const sId = String(s.id);
+    let keuntungan = 0;
+
+    if (laporanBySiklusMap.has(sId)) {
+      keuntungan = parseFloat(laporanBySiklusMap.get(sId).keuntungan) || 0;
+    } else {
+      const totalB = biayaSumBySiklusMap.get(sId) || 0;
+      keuntungan = 0 - totalB;
+    }
+
+    saldoKumulatifSebelumnya += keuntungan;
+    rantaiMusimSebelumnya.push({
+      id: sId,
+      nama: s.nama,
+      status: s.status,
+      keuntungan: parseFloat(keuntungan.toFixed(2))
+    });
+  }
+
+  return {
+    has_parent: true,
+    saldo_kumulatif_sebelumnya: parseFloat(saldoKumulatifSebelumnya.toFixed(2)),
+    rantai_musim_sebelumnya: rantaiMusimSebelumnya
+  };
+};
+
+/**
  * Mendapatkan laporan keuangan berdasarkan ID Siklus
  * GET /api/laporan-keuangan/:siklus_id
  */
 exports.getLaporanBySiklus = async (req, res, next) => {
   try {
     const { siklus_id } = req.params;
-
-    const laporanSnapshot = await LaporanKeuangan.where('siklus_id', '==', String(siklus_id)).limit(1).get();
-
-    if (laporanSnapshot.empty) {
-      return res.status(404).json({
-        success: false,
-        message: `Laporan keuangan untuk siklus ID ${siklus_id} belum dihitung.`
-      });
-    }
-
-    const laporan = laporanSnapshot.docs[0].data();
+    const cumulative = await calculateCumulativeChainFinance(siklus_id);
 
     // Fetch associated SiklusTanam
     const sDoc = await SiklusTanam.doc(String(siklus_id)).get();
@@ -33,8 +113,53 @@ exports.getLaporanBySiklus = async (req, res, next) => {
         tanggal_mulai: s.tanggal_mulai,
         tanggal_selesai: s.tanggal_selesai,
         hasil_panen: s.hasil_panen,
-        status: s.status
+        status: s.status,
+        musim_sebelumnya_id: s.musim_sebelumnya_id || null,
+        musim_sebelumnya_nama: s.musim_sebelumnya_nama || null
       };
+    }
+
+    // Flexible search for LaporanKeuangan
+    const laporanSnapshot = await LaporanKeuangan.get();
+    let laporan = null;
+    laporanSnapshot.forEach(doc => {
+      const d = doc.data();
+      if (String(d.siklus_id) === String(siklus_id)) {
+        laporan = d;
+      }
+    });
+
+    if (!laporan) {
+      // Calculate virtual report from BiayaProduksi if no saved report exists yet
+      const biayaSnap = await BiayaProduksi.get();
+      let total_biaya = 0;
+      biayaSnap.forEach(doc => {
+        const d = doc.data();
+        if (String(d.siklus_id) === String(siklus_id)) {
+          total_biaya += parseFloat(d.jumlah) || 0;
+        }
+      });
+
+      const total_pendapatan = 0;
+      const netProfit = total_pendapatan - total_biaya;
+
+      return res.status(200).json({
+        success: true,
+        message: `Laporan keuangan virtual untuk siklus ID ${siklus_id}.`,
+        data: {
+          id: String(siklus_id),
+          siklus_id: String(siklus_id),
+          total_biaya,
+          total_pendapatan,
+          keuntungan: netProfit,
+          bep_volume: 0,
+          bep_omset: 0,
+          siklus_tanam,
+          saldo_kumulatif_sebelumnya: cumulative.saldo_kumulatif_sebelumnya,
+          total_laba_rugi_kumulatif: parseFloat((netProfit + cumulative.saldo_kumulatif_sebelumnya).toFixed(2)),
+          rantai_musim_sebelumnya: cumulative.rantai_musim_sebelumnya
+        }
+      });
     }
 
     const hasil_panen = parseFloat(siklus_tanam?.hasil_panen) || 0;
@@ -43,6 +168,7 @@ exports.getLaporanBySiklus = async (req, res, next) => {
     const harga_jual = hasil_panen > 0 ? total_pendapatan / hasil_panen : 0;
     const bep_volume = harga_jual > 0 ? total_biaya / harga_jual : 0;
     const bep_omset = bep_volume * harga_jual;
+    const netProfit = total_pendapatan - total_biaya;
 
     res.status(200).json({
       success: true,
@@ -50,7 +176,10 @@ exports.getLaporanBySiklus = async (req, res, next) => {
         ...laporan,
         siklus_tanam,
         bep_volume: parseFloat(bep_volume.toFixed(2)),
-        bep_omset: parseFloat(bep_omset.toFixed(2))
+        bep_omset: parseFloat(bep_omset.toFixed(2)),
+        saldo_kumulatif_sebelumnya: cumulative.saldo_kumulatif_sebelumnya,
+        total_laba_rugi_kumulatif: parseFloat((netProfit + cumulative.saldo_kumulatif_sebelumnya).toFixed(2)),
+        rantai_musim_sebelumnya: cumulative.rantai_musim_sebelumnya
       }
     });
   } catch (error) {
@@ -132,6 +261,7 @@ exports.hitungLaporan = async (req, res, next) => {
     }
 
     const updatedDoc = await docRef.get();
+    const cumulative = await calculateCumulativeChainFinance(siklus_id);
 
     res.status(200).json({
       success: true,
@@ -139,7 +269,10 @@ exports.hitungLaporan = async (req, res, next) => {
       data: {
         ...updatedDoc.data(),
         bep_volume: calc.bep_volume,
-        bep_omset: calc.bep_omset
+        bep_omset: calc.bep_omset,
+        saldo_kumulatif_sebelumnya: cumulative.saldo_kumulatif_sebelumnya,
+        total_laba_rugi_kumulatif: parseFloat((calc.keuntungan + cumulative.saldo_kumulatif_sebelumnya).toFixed(2)),
+        rantai_musim_sebelumnya: cumulative.rantai_musim_sebelumnya
       }
     });
   } catch (error) {

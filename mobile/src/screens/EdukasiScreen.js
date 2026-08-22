@@ -5,7 +5,6 @@ import {
   View,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   Linking,
   Alert,
   Dimensions,
@@ -82,7 +81,6 @@ export default function EdukasiScreen() {
   const [activeTab, setActiveTab] = useState('panduan'); // 'panduan' | 'faq'
   const [expandedStep, setExpandedStep] = useState(null);
   const [expandedFaq, setExpandedFaq] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const handleDownloadPdf = async () => {
@@ -120,16 +118,6 @@ export default function EdukasiScreen() {
     });
   };
 
-  const filteredSteps = BUDIDAYA_STEPS.filter(step =>
-    step.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    step.content.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const filteredFaqs = FAQS.filter(faq =>
-    faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    faq.answer.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   return (
     <View style={styles.container}>
       {/* Tab Header Selector */}
@@ -163,23 +151,6 @@ export default function EdukasiScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Cari kata kunci (misal: pupuk, penyiraman)..."
-          placeholderTextColor={colors.textMuted}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <Ionicons name="close-circle" size={18} color={colors.textMuted} />
-          </TouchableOpacity>
-        )}
-      </View>
-
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {activeTab === 'panduan' ? (
           <View>
@@ -205,74 +176,66 @@ export default function EdukasiScreen() {
             </View>
 
             <Text style={styles.sectionTitle}>Tahapan Budidaya</Text>
-            {filteredSteps.length > 0 ? (
-              filteredSteps.map((step, index) => {
-                const isExpanded = expandedStep === index;
-                return (
-                  <View key={index} style={styles.accordionCard}>
-                    <TouchableOpacity
-                      style={styles.accordionHeader}
-                      onPress={() => toggleStep(index)}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.headerTitleRow}>
-                        <Ionicons name={step.icon} size={22} color={colors.primary} />
-                        <Text style={styles.stepTitle}>{step.title}</Text>
-                      </View>
-                      <Ionicons
-                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                        size={20}
-                        color={colors.textMuted}
-                      />
-                    </TouchableOpacity>
+            {BUDIDAYA_STEPS.map((step, index) => {
+              const isExpanded = expandedStep === index;
+              return (
+                <View key={index} style={styles.accordionCard}>
+                  <TouchableOpacity
+                    style={styles.accordionHeader}
+                    onPress={() => toggleStep(index)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.headerTitleRow}>
+                      <Ionicons name={step.icon} size={22} color={colors.primary} />
+                      <Text style={styles.stepTitle}>{step.title}</Text>
+                    </View>
+                    <Ionicons
+                      name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                      size={20}
+                      color={colors.textMuted}
+                    />
+                  </TouchableOpacity>
 
-                    {isExpanded && (
-                      <View style={styles.accordionContent}>
-                        <View style={styles.divider} />
-                        <Text style={styles.stepContentText}>{step.content}</Text>
-                      </View>
-                    )}
-                  </View>
-                );
-              })
-            ) : (
-              <Text style={styles.noResultText}>Tidak ditemukan panduan dengan kata kunci tersebut.</Text>
-            )}
+                  {isExpanded && (
+                    <View style={styles.accordionContent}>
+                      <View style={styles.divider} />
+                      <Text style={styles.stepContentText}>{step.content}</Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
           </View>
         ) : (
           <View>
             {/* FAQ List */}
             <Text style={styles.sectionTitle}>Pertanyaan Populer</Text>
-            {filteredFaqs.length > 0 ? (
-              filteredFaqs.map((faq, index) => {
-                const isExpanded = expandedFaq === index;
-                return (
-                  <View key={index} style={styles.accordionCard}>
-                    <TouchableOpacity
-                      style={styles.accordionHeader}
-                      onPress={() => toggleFaq(index)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.faqQuestionText}>{faq.question}</Text>
-                      <Ionicons
-                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                        size={18}
-                        color={colors.textMuted}
-                      />
-                    </TouchableOpacity>
+            {FAQS.map((faq, index) => {
+              const isExpanded = expandedFaq === index;
+              return (
+                <View key={index} style={styles.accordionCard}>
+                  <TouchableOpacity
+                    style={styles.accordionHeader}
+                    onPress={() => toggleFaq(index)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.faqQuestionText}>{faq.question}</Text>
+                    <Ionicons
+                      name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                      size={18}
+                      color={colors.textMuted}
+                    />
+                  </TouchableOpacity>
 
-                    {isExpanded && (
-                      <View style={styles.accordionContent}>
-                        <View style={styles.divider} />
-                        <Text style={styles.faqAnswerText}>{faq.answer}</Text>
-                      </View>
-                    )}
-                  </View>
-                );
-              })
-            ) : (
-              <Text style={styles.noResultText}>Tidak ditemukan FAQ dengan kata kunci tersebut.</Text>
-            )}
+                  {isExpanded && (
+                    <View style={styles.accordionContent}>
+                      <View style={styles.divider} />
+                      <Text style={styles.faqAnswerText}>{faq.answer}</Text>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
 
             {/* Contacts */}
             <Text style={[styles.sectionTitle, { marginTop: 25 }]}>Kontak Pendamping Lapangan</Text>
@@ -349,7 +312,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingTop: 30,
+    paddingTop: 20,
     paddingBottom: 40,
   },
   introCard: {
@@ -499,27 +462,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 8,
   },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.card,
-    marginHorizontal: 16,
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 13,
-    color: colors.text,
-    paddingVertical: 2,
-  },
   downloadPdfBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -535,12 +477,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
-  },
-  noResultText: {
-    textAlign: 'center',
-    color: colors.textMuted,
-    fontSize: 13,
-    fontStyle: 'italic',
-    marginVertical: 20,
   },
 });

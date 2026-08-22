@@ -1,10 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, Text, View, ScrollView, TextInput, TouchableOpacity, ActivityIndicator, Alert, Linking, RefreshControl, Modal, Platform, KeyboardAvoidingView } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { getSiklusList, updateSiklus, getBiayaList, createBiaya, updateBiaya, deleteBiaya, getLaporan, calculateLaporan, getPdfExportUrl } from '../services/api';
 import { colors } from '../theme/colors';
 
 const CATEGORIES = ['Benih', 'Pupuk', 'Pestisida', 'Tenaga Kerja', 'Sewa Alat', 'Lainnya'];
+
+const formatNumberWithDots = (val) => {
+  if (val === null || val === undefined || val === '') return '';
+  const digits = String(val).replace(/\D/g, '');
+  if (!digits) return '';
+  return parseInt(digits, 10).toLocaleString('id-ID');
+};
 
 export default function AccountingScreen() {
   const [activeTab, setActiveTab] = useState('buku'); // 'buku' | 'hpp' | 'bep' | 'labarugi'
@@ -145,7 +153,8 @@ export default function AccountingScreen() {
 
   // CRUD Costs Logic
   const handleSaveBiaya = async () => {
-    if (!selectedCategory || !deskripsi || !jumlah || !tanggal) {
+    const rawJumlah = jumlah ? jumlah.replace(/\D/g, '') : '';
+    if (!selectedCategory || !deskripsi || !rawJumlah || !tanggal) {
       Alert.alert('Gagal', 'Semua kolom form biaya wajib diisi.');
       return;
     }
@@ -154,7 +163,7 @@ export default function AccountingScreen() {
     const payload = {
       kategori: selectedCategory,
       deskripsi,
-      jumlah: parseFloat(jumlah),
+      jumlah: parseFloat(rawJumlah),
       tanggal,
       siklus_id: selectedSiklusId
     };
@@ -187,7 +196,7 @@ export default function AccountingScreen() {
     setEditingBiayaId(biaya.id);
     setSelectedCategory(biaya.kategori);
     setDeskripsi(biaya.deskripsi || '');
-    setJumlah(parseFloat(biaya.jumlah).toString());
+    setJumlah(formatNumberWithDots(biaya.jumlah));
     setTanggal(biaya.tanggal.split('T')[0]);
     setIsFormVisible(true);
   };
@@ -244,7 +253,7 @@ export default function AccountingScreen() {
     setActionLoading(false);
     
     if (res.success) {
-      Alert.alert('Sukses', 'Kalkulasi HPP & keuntungan berhasil disimpan ke database.');
+      Alert.alert('Sukses', 'Hitung-hitungan biaya modal & perkiraan untung berhasil disimpan ke database.');
       fetchCycleData(selectedSiklusId);
     } else {
       Alert.alert('Gagal', res.error || 'Gagal menyimpan laporan.');
@@ -299,13 +308,13 @@ export default function AccountingScreen() {
 
   // Auto generated summary text for profit/loss tab
   const getNarrativeSummary = () => {
-    if (totalBiayaSum === 0) return 'Belum ada biaya produksi yang tercatat. Silakan tambah pengeluaran untuk memulai analisis laba rugi.';
-    if (estimasiHasilPanen === 0) return 'Estimasi hasil panen belum diisi di tab Kalkulator HPP. Silakan tentukan target hasil panen Anda.';
+    if (totalBiayaSum === 0) return 'Belum ada biaya produksi yang tercatat. Silakan tambah pengeluaran untuk memulai hitung-hitungan untung rugi.';
+    if (estimasiHasilPanen === 0) return 'Target hasil panen belum diisi di tab Hitung Biaya Modal. Silakan tentukan target hasil panen Anda.';
     
     if (projectedNetIncome >= 0) {
-      return `Usaha tani pada siklus ini diproyeksikan LAYAK TANAM. Dengan HPP sebesar Rp ${Math.round(simulatedHPP).toLocaleString('id-ID')}/kg and harga pasar Rp ${targetHargaJual.toLocaleString('id-ID')}/kg, Anda dapat menghasilkan margin keuntungan bersih sekitar Rp ${Math.round(projectedNetIncome).toLocaleString('id-ID')}. Titik BEP volume Anda adalah ${Math.round(bepVolume)} kg.`;
+      return `Usaha tani pada musim ini diperkirakan UNTUNG. Dengan biaya modal sebesar Rp ${Math.round(simulatedHPP).toLocaleString('id-ID')}/kg dan harga pasar Rp ${targetHargaJual.toLocaleString('id-ID')}/kg, Anda bisa mendapatkan untung bersih sekitar Rp ${Math.round(projectedNetIncome).toLocaleString('id-ID')}. Target balik modal Anda adalah minimal ${Math.round(bepVolume)} kg hasil panen.`;
     } else {
-      return `Peringatan: Proyeksi menunjukkan potensi kerugian sebesar Rp ${Math.round(Math.abs(projectedNetIncome)).toLocaleString('id-ID')}. HPP Aktual Anda (Rp ${Math.round(simulatedHPP).toLocaleString('id-ID')}) melebihi target harga jual pasar (Rp ${targetHargaJual.toLocaleString('id-ID')}). Disarankan untuk menekan biaya operasional atau mencari saluran penjualan dengan harga lebih tinggi.`;
+      return `Peringatan: Perkiraan menunjukkan potensi rugi sebesar Rp ${Math.round(Math.abs(projectedNetIncome)).toLocaleString('id-ID')}. Biaya modal Anda (Rp ${Math.round(simulatedHPP).toLocaleString('id-ID')}/kg) melebihi target harga jual pasar (Rp ${targetHargaJual.toLocaleString('id-ID')}/kg). Disarankan untuk menekan biaya operasional atau mencari harga jual yang lebih tinggi.`;
     }
   };
 
@@ -320,12 +329,12 @@ export default function AccountingScreen() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Buku Keuangan</Text>
-        <Text style={styles.subtitle}>Kelola keuangan demplot secara modern, taksir HPP & titik impas BEP.</Text>
+        <Text style={styles.subtitle}>Kelola keuangan demplot secara mudah, hitung biaya modal & perkiraan balik modal.</Text>
       </View>
 
       {/* Cycle Selector Capsule */}
       <View style={styles.selectorWrapper}>
-        <Text style={styles.inputLabel}>Pilih Siklus Tanam:</Text>
+        <Text style={styles.inputLabel}>Pilih Musim Tanam:</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.cyclesScroll}>
           {siklusList.map((s) => (
             <TouchableOpacity
@@ -341,13 +350,38 @@ export default function AccountingScreen() {
         </ScrollView>
       </View>
 
+      {/* Carry-Over Banner (if continuation season) */}
+      {selectedSiklus?.musim_sebelumnya_id && (
+        <View style={styles.carryOverBannerCard}>
+          <View style={styles.carryOverBannerHeader}>
+            <Ionicons name="git-commit-outline" size={18} color={colors.primary} />
+            <Text style={styles.carryOverBannerTitle}>
+              Total Musim-Musim Sebelumnya ({selectedSiklus.musim_sebelumnya_nama || 'Lanjutan'})
+            </Text>
+          </View>
+          <Text style={[
+            styles.carryOverBannerVal,
+            { color: (laporan?.saldo_kumulatif_sebelumnya || 0) >= 0 ? colors.primary : colors.danger }
+          ]}>
+            {(laporan?.saldo_kumulatif_sebelumnya || 0) >= 0
+              ? `+Rp ${(laporan?.saldo_kumulatif_sebelumnya || 0).toLocaleString('id-ID')} (Total Untung Sebelumnya)`
+              : `-Rp ${Math.abs(laporan?.saldo_kumulatif_sebelumnya || 0).toLocaleString('id-ID')} (Total Rugi Sebelumnya)`}
+          </Text>
+          <Text style={styles.carryOverBannerDesc}>
+            {(laporan?.saldo_kumulatif_sebelumnya || 0) >= 0
+              ? 'Gabungan total untung dari musim-musim sebelumnya dalam rantai ini.'
+              : 'Total rugi modal dari musim sebelumnya yang perlu ditutup oleh hasil musim berjalan.'}
+          </Text>
+        </View>
+      )}
+
       {/* Main Premium Tab bar */}
       <View style={styles.tabBar}>
         {['buku', 'hpp', 'bep', 'labarugi'].map((tab) => {
           let label = 'Buku';
-          if (tab === 'hpp') label = 'Kalkulator HPP';
-          if (tab === 'bep') label = 'Proyeksi & BEP';
-          if (tab === 'labarugi') label = 'Laba Rugi';
+          if (tab === 'hpp') label = 'Hitung Biaya Modal';
+          if (tab === 'bep') label = 'Perkiraan Balik Modal';
+          if (tab === 'labarugi') label = 'Untung Rugi';
 
           return (
             <TouchableOpacity
@@ -375,7 +409,7 @@ export default function AccountingScreen() {
               </Text>
             </View>
             <View style={styles.gridCard}>
-              <Text style={styles.gridLabel}>Laba Rugi Proyeksi</Text>
+              <Text style={styles.gridLabel}>Perkiraan Untung Rugi</Text>
               <Text style={[styles.gridValue, { color: projectedNetIncome >= 0 ? colors.primary : colors.danger }]}>
                 Rp {Math.round(projectedNetIncome).toLocaleString('id-ID')}
               </Text>
@@ -431,21 +465,21 @@ export default function AccountingScreen() {
               </View>
             ))
           ) : (
-            <Text style={styles.noDataText}>Belum ada riwayat pengeluaran untuk siklus tanam ini.</Text>
+            <Text style={styles.noDataText}>Belum ada riwayat pengeluaran untuk musim tanam ini.</Text>
           )}
         </View>
       )}
 
-      {/* TAB 2: KALKULATOR HPP */}
+      {/* TAB 2: HITUNG BIAYA MODAL */}
       {activeTab === 'hpp' && (
         <View>
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Kalkulasi Harga Pokok Produksi (HPP)</Text>
-            <Text style={styles.cardDesc}>Tentukan estimasi total panen untuk membagi seluruh total modal menjadi HPP per kg.</Text>
+            <Text style={styles.cardTitle}>Hitung Biaya Modal per Kg</Text>
+            <Text style={styles.cardDesc}>Tentukan target hasil panen untuk membagi total modal menjadi biaya modal per kg.</Text>
             
             <View style={styles.hppResultContainer}>
               <Text style={styles.hppLargeVal}>Rp {Math.round(simulatedHPP).toLocaleString('id-ID')} <Text style={{ fontSize: 14, color: colors.textMuted }}>/ kg</Text></Text>
-              <Text style={styles.hppFormula}>Rumus: Total Modal (Rp {totalBiayaSum.toLocaleString('id-ID')}) ÷ Hasil Panen ({estimasiHasilPanen} kg)</Text>
+              <Text style={styles.hppFormula}>Cara Hitung: Total Modal (Rp {totalBiayaSum.toLocaleString('id-ID')}) ÷ Hasil Panen ({estimasiHasilPanen} kg)</Text>
             </View>
 
             {/* Slider Inputs for Target Harvest Weight */}
@@ -458,8 +492,8 @@ export default function AccountingScreen() {
                 <TextInput
                   style={styles.numericValueInput}
                   keyboardType="numeric"
-                  value={estimasiHasilPanen.toString()}
-                  onChangeText={(val) => setEstimasiHasilPanen(parseInt(val) || 0)}
+                  value={estimasiHasilPanen ? formatNumberWithDots(estimasiHasilPanen) : ''}
+                  onChangeText={(val) => setEstimasiHasilPanen(parseInt(val.replace(/\D/g, ''), 10) || 0)}
                 />
                 <TouchableOpacity style={styles.circleStepBtn} onPress={() => setEstimasiHasilPanen(estimasiHasilPanen + 100)}>
                   <Text style={styles.stepBtnText}>+</Text>
@@ -479,8 +513,8 @@ export default function AccountingScreen() {
 
           {/* Pricing Margin Analysis */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Analisis Titik Harga & Keuntungan</Text>
-            <Text style={styles.cardDesc}>Prediksi keuntungan bersih berdasarkan variasi harga jual pasar saat panen.</Text>
+            <Text style={styles.cardTitle}>Perkiraan Harga Jual & Untung</Text>
+            <Text style={styles.cardDesc}>Perkiraan untung bersih berdasarkan variasi harga jual pasar saat panen.</Text>
 
             {[15000, 25000, 35000].map((pricePoint) => {
               const diff = pricePoint - simulatedHPP;
@@ -498,7 +532,7 @@ export default function AccountingScreen() {
                   </View>
                   <View style={[styles.pricePointBadge, { backgroundColor: netProfit >= 0 ? 'rgba(46, 125, 50, 0.08)' : 'rgba(198, 40, 40, 0.08)' }]}>
                     <Text style={{ fontSize: 11, fontWeight: 'bold', color: netProfit >= 0 ? colors.primary : colors.danger }}>
-                      {netProfit >= 0 ? `Margin +Rp ${Math.round(diff).toLocaleString('id-ID')}/kg` : `Defisit Rp ${Math.round(Math.abs(diff)).toLocaleString('id-ID')}/kg`}
+                      {netProfit >= 0 ? `Selisih Untung +Rp ${Math.round(diff).toLocaleString('id-ID')}/kg` : `Rugi Rp ${Math.round(Math.abs(diff)).toLocaleString('id-ID')}/kg`}
                     </Text>
                   </View>
                 </View>
@@ -508,23 +542,23 @@ export default function AccountingScreen() {
         </View>
       )}
 
-      {/* TAB 3: PROYEKSI & BEP */}
+      {/* TAB 3: PERKIRAAN BALIK MODAL */}
       {activeTab === 'bep' && (
         <View>
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Simulasi Titik Impas (BEP)</Text>
-            <Text style={styles.cardDesc}>Tentukan target harga jual pasar per kg untuk memantau batas volume pengembalian modal.</Text>
+            <Text style={styles.cardTitle}>Perkiraan Balik Modal</Text>
+            <Text style={styles.cardDesc}>Analisis jumlah panen dan target uang masuk minimal agar modal tani Anda kembali.</Text>
 
             <View style={styles.bepGrid}>
               <View style={styles.bepBox}>
-                <Text style={styles.bepLabel}>BEP Volume (Batas kg)</Text>
+                <Text style={styles.bepLabel}>Kg yang Harus Terjual</Text>
                 <Text style={styles.bepVal}>{bepVolume.toFixed(1)} kg</Text>
-                <Text style={styles.bepDesc}>Harus terjual agar balik modal</Text>
+                <Text style={styles.bepDesc}>Hasil panen minimal biar balik modal</Text>
               </View>
               <View style={styles.bepBox}>
-                <Text style={styles.bepLabel}>BEP Omset (Rupiah)</Text>
+                <Text style={styles.bepLabel}>Target Uang Masuk</Text>
                 <Text style={styles.bepVal}>Rp {Math.round(bepOmset).toLocaleString('id-ID')}</Text>
-                <Text style={styles.bepDesc}>Target omset impas tani</Text>
+                <Text style={styles.bepDesc}>Uang masuk minimal biar balik modal</Text>
               </View>
             </View>
 
@@ -538,8 +572,8 @@ export default function AccountingScreen() {
                 <TextInput
                   style={styles.numericValueInput}
                   keyboardType="numeric"
-                  value={targetHargaJual.toString()}
-                  onChangeText={(val) => setTargetHargaJual(parseInt(val) || 0)}
+                  value={targetHargaJual ? formatNumberWithDots(targetHargaJual) : ''}
+                  onChangeText={(val) => setTargetHargaJual(parseInt(val.replace(/\D/g, ''), 10) || 0)}
                 />
                 <TouchableOpacity style={styles.circleStepBtn} onPress={() => setTargetHargaJual(targetHargaJual + 1000)}>
                   <Text style={styles.stepBtnText}>+</Text>
@@ -559,11 +593,11 @@ export default function AccountingScreen() {
 
           {/* Safety margin indicator */}
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Rasio Keamanan Hasil Panen</Text>
+            <Text style={styles.cardTitle}>Tingkat Aman Hasil Panen</Text>
             <Text style={styles.cardDesc}>Menilai risiko gagal panen terhadap batas minimum modal balik.</Text>
 
             <View style={styles.safetyHeader}>
-              <Text style={styles.safetyLabel}>Rasio Keamanan: {safetyRatio.toFixed(2)}x lipat</Text>
+              <Text style={styles.safetyLabel}>Tingkat Aman Panen: {safetyRatio.toFixed(2)}x lipat</Text>
               <Text style={[styles.safetyStatusText, { color: safetyColor }]}>{safetyStatus.toUpperCase()}</Text>
             </View>
 
@@ -571,26 +605,55 @@ export default function AccountingScreen() {
               <View style={[styles.progressBar, { width: `${safetyProgress * 100}%`, backgroundColor: safetyColor }]} />
             </View>
             <Text style={styles.safetyInstructions}>
-              {safetyStatus === 'Aman' && '✓ Target panen Anda aman jauh di atas garis balik modal BEP.'}
-              {safetyStatus === 'Rentan' && '⚠️ Target panen mepet dengan BEP. Hati-hati risiko hama & cuaca.'}
-              {safetyStatus === 'Bahaya' && '❌ Bahaya! Estimasi panen Anda saat ini di bawah garis balik modal BEP.'}
+              {safetyStatus === 'Aman' && '✓ Target panen Anda aman jauh di atas batas balik modal.'}
+              {safetyStatus === 'Rentan' && '⚠️ Target panen mepet dengan batas balik modal. Hati-hati risiko hama & cuaca.'}
+              {safetyStatus === 'Bahaya' && '❌ Bahaya! Perkiraan panen Anda saat ini di bawah batas balik modal.'}
             </Text>
           </View>
 
+          {/* Akumulasi Proyeksi Rantai Musim */}
+          {selectedSiklus?.musim_sebelumnya_id && (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Total Perkiraan Musim-Musim Sebelumnya</Text>
+              <Text style={styles.cardDesc}>Menggabungkan perkiraan musim ini dengan saldo dari musim-musim sebelumnya.</Text>
+              <View style={{ gap: 8, marginTop: 10 }}>
+                <View style={styles.statementRowSub}>
+                  <Text style={styles.statementLabel}>Perkiraan Untung/Rugi Musim Ini</Text>
+                  <Text style={[styles.statementVal, { color: projectedNetIncome >= 0 ? colors.primary : colors.danger }]}>
+                    {projectedNetIncome < 0 ? `-Rp ${Math.abs(Math.round(projectedNetIncome)).toLocaleString('id-ID')}` : `Rp ${Math.round(projectedNetIncome).toLocaleString('id-ID')}`}
+                  </Text>
+                </View>
+                <View style={styles.statementRowSub}>
+                  <Text style={styles.statementLabel}>Saldo Bawaan dari Musim Sebelumnya</Text>
+                  <Text style={[styles.statementVal, { color: (laporan?.saldo_kumulatif_sebelumnya || 0) >= 0 ? colors.primary : colors.danger }]}>
+                    {(laporan?.saldo_kumulatif_sebelumnya || 0) < 0 ? `-Rp ${Math.abs(Math.round(laporan?.saldo_kumulatif_sebelumnya || 0)).toLocaleString('id-ID')}` : `Rp ${Math.round(laporan?.saldo_kumulatif_sebelumnya || 0).toLocaleString('id-ID')}`}
+                  </Text>
+                </View>
+                <View style={styles.statementDivider} />
+                <View style={styles.statementRowSubBold}>
+                  <Text style={styles.statementLabelBold}>Total Perkiraan Gabungan Musim</Text>
+                  <Text style={[styles.statementValBold, { color: (projectedNetIncome + (laporan?.saldo_kumulatif_sebelumnya || 0)) >= 0 ? colors.primary : colors.danger }]}>
+                    {(projectedNetIncome + (laporan?.saldo_kumulatif_sebelumnya || 0)) < 0 ? `-Rp ${Math.abs(Math.round(projectedNetIncome + (laporan?.saldo_kumulatif_sebelumnya || 0))).toLocaleString('id-ID')}` : `Rp ${Math.round(projectedNetIncome + (laporan?.saldo_kumulatif_sebelumnya || 0)).toLocaleString('id-ID')}`}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
+
           {/* Save Calculations CTA */}
           <TouchableOpacity style={styles.saveCalcBtn} onPress={handleSaveSimulatedReport} disabled={actionLoading}>
-            <Text style={styles.saveCalcBtnText}>💾 Terapkan Proyeksi ke Database</Text>
+            <Text style={styles.saveCalcBtnText}>💾 Simpan Perkiraan ke Database</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* TAB 4: LAPORAN LABA RUGI */}
+      {/* TAB 4: LAPORAN UNTUNG RUGI */}
       {activeTab === 'labarugi' && (
         <View>
           {/* Statement Sheet Card */}
           <View style={styles.card}>
-            <Text style={styles.statementTitle}>Laporan Laba Rugi Proyeksi</Text>
-            <Text style={styles.statementSubtitle}>Siklus: {selectedSiklus?.nama || 'Demplot Utama'}</Text>
+            <Text style={styles.statementTitle}>Perkiraan Laporan Untung Rugi</Text>
+            <Text style={styles.statementSubtitle}>Musim: {selectedSiklus?.nama || 'Demplot Utama'}</Text>
             <View style={styles.statementDivider} />
 
             <View style={styles.statementRow}>
@@ -619,11 +682,31 @@ export default function AccountingScreen() {
             <View style={styles.statementDoubleDivider} />
 
             <View style={styles.statementRowNet}>
-              <Text style={styles.statementNetTitle}>LABA BERSIH (PROYEKSI)</Text>
+              <Text style={styles.statementNetTitle}>
+                {selectedSiklus?.musim_sebelumnya_id ? 'UNTUNG BERSIH (MUSIM INI)' : 'PERKIRAAN UNTUNG BERSIH'}
+              </Text>
               <Text style={[styles.statementNetVal, { color: projectedNetIncome >= 0 ? colors.primary : colors.danger }]}>
-                Rp {Math.round(projectedNetIncome).toLocaleString('id-ID')}
+                {projectedNetIncome < 0 ? `-Rp ${Math.abs(Math.round(projectedNetIncome)).toLocaleString('id-ID')}` : `Rp ${Math.round(projectedNetIncome).toLocaleString('id-ID')}`}
               </Text>
             </View>
+
+            {selectedSiklus?.musim_sebelumnya_id && (
+              <>
+                <View style={[styles.statementRowSub, { marginTop: 10 }]}>
+                  <Text style={styles.statementLabel}>Saldo Bawaan dari Musim Sebelumnya</Text>
+                  <Text style={[styles.statementVal, { color: (laporan?.saldo_kumulatif_sebelumnya || 0) >= 0 ? colors.primary : colors.danger }]}>
+                    {(laporan?.saldo_kumulatif_sebelumnya || 0) < 0 ? `-Rp ${Math.abs(Math.round(laporan?.saldo_kumulatif_sebelumnya || 0)).toLocaleString('id-ID')}` : `Rp ${Math.round(laporan?.saldo_kumulatif_sebelumnya || 0).toLocaleString('id-ID')}`}
+                  </Text>
+                </View>
+                <View style={styles.statementDoubleDivider} />
+                <View style={styles.statementRowNet}>
+                  <Text style={styles.statementNetTitle}>TOTAL UNTUNG / RUGI (GABUNGAN MUSIM)</Text>
+                  <Text style={[styles.statementNetVal, { color: (projectedNetIncome + (laporan?.saldo_kumulatif_sebelumnya || 0)) >= 0 ? colors.primary : colors.danger }]}>
+                    {(projectedNetIncome + (laporan?.saldo_kumulatif_sebelumnya || 0)) < 0 ? `-Rp ${Math.abs(Math.round(projectedNetIncome + (laporan?.saldo_kumulatif_sebelumnya || 0))).toLocaleString('id-ID')}` : `Rp ${Math.round(projectedNetIncome + (laporan?.saldo_kumulatif_sebelumnya || 0)).toLocaleString('id-ID')}`}
+                  </Text>
+                </View>
+              </>
+            )}
           </View>
 
           {/* Narrative Autogenerated Analysis */}
@@ -681,11 +764,11 @@ export default function AccountingScreen() {
                   <Text style={styles.inputLabel}>Jumlah Pengeluaran (Rp)</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="Contoh: 150000"
+                    placeholder="Contoh: 150.000"
                     placeholderTextColor={colors.textMuted}
                     keyboardType="numeric"
                     value={jumlah}
-                    onChangeText={setJumlah}
+                    onChangeText={(text) => setJumlah(formatNumberWithDots(text))}
                   />
                 </View>
 
@@ -1147,12 +1230,14 @@ const styles = StyleSheet.create({
   statementRowSub: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingLeft: 12,
     marginBottom: 4,
   },
   statementRowSubBold: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingLeft: 12,
     marginTop: 8,
     borderTopWidth: 1,
@@ -1160,22 +1245,28 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   statementLabel: {
+    flex: 1,
     fontSize: 12,
     color: colors.text,
+    marginRight: 8,
   },
   statementVal: {
     fontSize: 12,
     color: colors.text,
+    textAlign: 'right',
   },
   statementLabelBold: {
+    flex: 1,
     fontSize: 12,
     fontWeight: 'bold',
     color: colors.text,
+    marginRight: 8,
   },
   statementValBold: {
     fontSize: 12,
     fontWeight: 'bold',
     color: colors.text,
+    textAlign: 'right',
   },
   statementDoubleDivider: {
     height: 3,
@@ -1190,13 +1281,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statementNetTitle: {
-    fontSize: 14,
+    flex: 1,
+    fontSize: 13,
     fontWeight: 'bold',
     color: colors.text,
+    marginRight: 8,
   },
   statementNetVal: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: 'bold',
+    textAlign: 'right',
   },
   narrativeCard: {
     backgroundColor: 'rgba(0,0,0,0.015)',
@@ -1324,5 +1418,39 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: colors.text,
+  },
+  carryOverBannerCard: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.primary,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+  },
+  carryOverBannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  carryOverBannerTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  carryOverBannerVal: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginVertical: 2,
+  },
+  carryOverBannerDesc: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 2,
   },
 });

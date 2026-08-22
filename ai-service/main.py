@@ -1,14 +1,22 @@
 import random
 import os
-from fastapi import FastAPI, File, UploadFile, Header, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import torch
-import torch.nn as nn
-from torchvision import transforms
-import torchvision.models as models
-from PIL import Image
 import io
+# pyrefly: ignore [missing-import]
+from fastapi import FastAPI, File, UploadFile, Header, HTTPException
+# pyrefly: ignore [missing-import]
+from fastapi.middleware.cors import CORSMiddleware
+# pyrefly: ignore [missing-import]
+from pydantic import BaseModel
+# pyrefly: ignore [missing-import]
+import torch
+# pyrefly: ignore [missing-import]
+import torch.nn as nn
+# pyrefly: ignore [missing-import]
+from torchvision import transforms
+# pyrefly: ignore [missing-import]
+import torchvision.models as models
+# pyrefly: ignore [missing-import]
+from PIL import Image
 
 INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
 env = os.getenv("ENV") or os.getenv("NODE_ENV") or "development"
@@ -32,11 +40,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.60"))
+
 # Model Response format yang disetujui
 class PredictionResponse(BaseModel):
     hasil_klasifikasi: str
     confidence: float
     rekomendasi: str
+    is_confident: bool = True
+    is_fallback: bool = False
 
 # Daftar diagnosis
 DIAGNOSES = [
@@ -45,16 +57,8 @@ DIAGNOSES = [
         "rekomendasi": "Tanaman cabai jawa dalam kondisi sehat dan prima. Lakukan pemeliharaan rutin, penyiraman yang stabil, serta pemupukan berimbang secara berkala."
     },
     {
-        "hasil_klasifikasi": "Keriting Daun (Leaf Curl)",
-        "rekomendasi": "Semprot dengan insektisida berbahan aktif abamektin atau imidakloprid untuk mengendalikan hama pembawa virus (thrips/kutu daun). Singkirkan gulma di sekitar tanaman."
-    },
-    {
         "hasil_klasifikasi": "Bercak Daun (Leaf Spot)",
         "rekomendasi": "Semprot dengan fungisida berbahan aktif tembaga hidroksida atau mankozeb. Kurangi kelembaban dengan memperbaiki sirkulasi udara dan pangkas daun yang terinfeksi."
-    },
-    {
-        "hasil_klasifikasi": "Kutu Kebul (Whitefly)",
-        "rekomendasi": "Pasang perangkap kuning berperekat di sekitar bedeng. Semprot dengan insektisida nabati (seperti ekstrak daun mimba) atau insektisida kimia sistemik jika serangan parah."
     },
     {
         "hasil_klasifikasi": "Daun Menguning (Yellowish)",
@@ -82,6 +86,7 @@ def load_model():
         try:
             print("[INFO] Loading MobileNetV3 model structure...")
             try:
+                # pyrefly: ignore [missing-import]
                 from torchvision.models import mobilenet_v3_small, MobileNet_V3_Small_Weights
                 model = mobilenet_v3_small(weights=None)
             except Exception:
@@ -89,7 +94,7 @@ def load_model():
                 
             # Replace final classifier layer
             num_features = model.classifier[3].in_features
-            model.classifier[3] = nn.Linear(num_features, 5)
+            model.classifier[3] = nn.Linear(num_features, 3)
             
             # Load state dict
             model.load_state_dict(torch.load(model_path, map_location=device))
@@ -109,6 +114,7 @@ def read_root():
         "status": "online",
         "service": "pantau-ai-service",
         "model_loaded": model_loaded,
+        "confidence_threshold": CONFIDENCE_THRESHOLD,
         "info": "Gunakan endpoint POST /predict dengan mengunggah gambar tanaman untuk klasifikasi."
     }
 
@@ -144,13 +150,26 @@ async def predict_pest(
             class_idx = predicted_idx.item()
             conf_val = round(confidence.item(), 2)
             
+            # Check confidence threshold
+            if conf_val < CONFIDENCE_THRESHOLD:
+                print(f"[WARN] PyTorch Inference: Confidence {conf_val} below threshold {CONFIDENCE_THRESHOLD}. Returning low confidence response.")
+                return {
+                    "hasil_klasifikasi": "Foto Kurang Jelas / Tidak Yakin",
+                    "confidence": conf_val,
+                    "rekomendasi": "Foto kurang jelas atau sudut pengambilan foto kurang dekat ke daun. Silakan foto ulang dengan pencahayaan lebih terang dan posisi lebih dekat ke permukaan daun cabai jawa.",
+                    "is_confident": False,
+                    "is_fallback": False
+                }
+            
             selected_diagnosis = DIAGNOSES[class_idx]
             print(f"[SUCCESS] PyTorch Inference: Class {class_idx} ({selected_diagnosis['hasil_klasifikasi']}) with confidence {conf_val}")
             
             return {
                 "hasil_klasifikasi": selected_diagnosis["hasil_klasifikasi"],
                 "confidence": conf_val,
-                "rekomendasi": selected_diagnosis["rekomendasi"]
+                "rekomendasi": selected_diagnosis["rekomendasi"],
+                "is_confident": True,
+                "is_fallback": False
             }
         except Exception as e:
             print(f"[WARN] PyTorch Inference failed, falling back to dummy logic: {e}")
@@ -159,22 +178,20 @@ async def predict_pest(
     selected_diagnosis = None
     if "healthy" in filename or "sehat" in filename:
         selected_diagnosis = DIAGNOSES[0] # Daun Sehat
-    elif "curl" in filename or "keriting" in filename:
-        selected_diagnosis = DIAGNOSES[1] # Keriting Daun (Leaf Curl)
     elif "spot" in filename or "bercak" in filename:
-        selected_diagnosis = DIAGNOSES[2] # Bercak Daun (Leaf Spot)
-    elif "whitefly" in filename or "kutu" in filename or "kebul" in filename:
-        selected_diagnosis = DIAGNOSES[3] # Kutu Kebul (Whitefly)
+        selected_diagnosis = DIAGNOSES[1] # Bercak Daun (Leaf Spot)
     elif "yellow" in filename or "kuning" in filename:
-        selected_diagnosis = DIAGNOSES[4] # Daun Menguning (Yellowish)
+        selected_diagnosis = DIAGNOSES[2] # Daun Menguning (Yellowish)
     else:
         selected_diagnosis = random.choice(DIAGNOSES)
 
-    confidence = round(random.uniform(0.82, 0.99), 2)
+    confidence = round(random.uniform(0.70, 0.85), 2)
 
-    print(f"[SUCCESS] Fallback Dummy: {selected_diagnosis['hasil_klasifikasi']} with confidence {confidence}")
+    print(f"[SUCCESS] Fallback Dummy: {selected_diagnosis['hasil_klasifikasi']} with confidence {confidence} (is_fallback=True)")
     return {
         "hasil_klasifikasi": selected_diagnosis["hasil_klasifikasi"],
         "confidence": confidence,
-        "rekomendasi": selected_diagnosis["rekomendasi"]
+        "rekomendasi": selected_diagnosis["rekomendasi"],
+        "is_confident": True,
+        "is_fallback": True
     }

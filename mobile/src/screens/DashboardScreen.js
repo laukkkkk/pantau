@@ -53,12 +53,15 @@ export default function DashboardScreen() {
   const [selectedHistoryParam, setSelectedHistoryParam] = useState('kelembaban');
   const [alerts, setAlerts] = useState([]);
 
-  // Modal Form States for Adding a Cycle
+  // Modal Form States for Adding / Editing a Season
   const [modalVisible, setModalVisible] = useState(false);
+  const [editingSiklusId, setEditingSiklusId] = useState(null);
   const [newSiklusNama, setNewSiklusNama] = useState('');
   const [selectedKomoditasOption, setSelectedKomoditasOption] = useState('Cabai Jawa');
   const [customKomoditasText, setCustomKomoditasText] = useState('');
   const [newSiklusTanggal, setNewSiklusTanggal] = useState(new Date().toISOString().split('T')[0]);
+  const [isLanjutan, setIsLanjutan] = useState(false);
+  const [selectedMusimSebelumnyaId, setSelectedMusimSebelumnyaId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   // Modal States for Finishing a Cycle
@@ -80,7 +83,7 @@ export default function DashboardScreen() {
     if (isNaN(dateVal.getTime())) {
       return { text: 'Belum ada data', color: '#757575', status: 'stale' };
     }
-    
+
     const diffMs = new Date() - dateVal;
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
@@ -154,7 +157,7 @@ export default function DashboardScreen() {
     if (!updatingDevice) return;
     setAssignmentModalVisible(false);
     setLoading(true);
-    
+
     const res = await updateDeviceAssignment(updatingDevice.id, bedengId);
     if (res.success) {
       Alert.alert('Sukses', `Sensor ${updatingDevice.id} berhasil ditugaskan ke bedeng.`);
@@ -231,11 +234,92 @@ export default function DashboardScreen() {
     await fetchSensorData(bedengId);
   };
 
-  // Handler Tambah Siklus Baru dengan Validasi
+  // Helper penyaring bedeng berdasarkan deviceId (SN-1: 1-8, SN-2: 9-16)
+  const getFilteredBedengsForDevice = (device) => {
+    if (!device || !Array.isArray(bedengs)) return bedengs;
+    const devId = String(device.id).toUpperCase();
+    if (devId === 'SN-1' || devId.endsWith('SN-1')) {
+      return bedengs.filter(b => {
+        const num = parseInt(b.nomor_bedeng || b.id, 10);
+        return !isNaN(num) && num >= 1 && num <= 8;
+      });
+    } else if (devId === 'SN-2' || devId.endsWith('SN-2')) {
+      return bedengs.filter(b => {
+        const num = parseInt(b.nomor_bedeng || b.id, 10);
+        return !isNaN(num) && num >= 9 && num <= 16;
+      });
+    }
+    return bedengs;
+  };
+
+  // Helper penyaring musim selesai yang belum terikat dengan musim lain
+  const getAvailableParentSeasons = (allHistory, currentEditingId = null) => {
+    if (!Array.isArray(allHistory)) return [];
+
+    const usedParentIds = new Set();
+    allHistory.forEach(s => {
+      if (s.musim_sebelumnya_id && String(s.id) !== String(currentEditingId)) {
+        usedParentIds.add(String(s.musim_sebelumnya_id));
+      }
+    });
+
+    return allHistory.filter(s => {
+      if (currentEditingId && String(s.id) === String(currentEditingId)) return false;
+      const st = (s.status || '').toLowerCase();
+      const isFinished = st !== 'berjalan' && st !== 'aktif';
+      if (!isFinished) return false;
+      return !usedParentIds.has(String(s.id));
+    });
+  };
+
+  // Handler Buka Modal Tambah Musim
+  const handleOpenAddModal = () => {
+    setEditingSiklusId(null);
+    setNewSiklusNama('');
+    setSelectedKomoditasOption('Cabai Jawa');
+    setCustomKomoditasText('');
+    setNewSiklusTanggal(new Date().toISOString().split('T')[0]);
+    setIsLanjutan(false);
+    setSelectedMusimSebelumnyaId('');
+    setModalVisible(true);
+  };
+
+  // Handler Buka Modal Edit Musim
+  const handleOpenEditModal = (item) => {
+    if (!item) return;
+    setEditingSiklusId(item.id);
+    setNewSiklusNama(item.nama || '');
+    setNewSiklusTanggal(item.tanggal_tanam ? item.tanggal_tanam.split('T')[0] : new Date().toISOString().split('T')[0]);
+
+    if (item.tanaman) {
+      if (KOMODITAS_OPTIONS.includes(item.tanaman)) {
+        setSelectedKomoditasOption(item.tanaman);
+        setCustomKomoditasText('');
+      } else {
+        setSelectedKomoditasOption('Lainnya');
+        setCustomKomoditasText(item.tanaman);
+      }
+    } else {
+      setSelectedKomoditasOption('Cabai Jawa');
+      setCustomKomoditasText('');
+    }
+
+    if (item.musim_sebelumnya_id) {
+      setIsLanjutan(true);
+      setSelectedMusimSebelumnyaId(String(item.musim_sebelumnya_id));
+    } else {
+      setIsLanjutan(false);
+      setSelectedMusimSebelumnyaId('');
+    }
+
+    setModalVisible(true);
+  };
+
+  // Handler Tambah / Edit Siklus Baru dengan Validasi
   const handleAddSiklusSubmit = async () => {
     const trimmedNama = newSiklusNama.trim();
     if (!trimmedNama || trimmedNama.length < 3) {
-      Alert.alert('Validasi Gagal', 'Nama siklus tanam minimal 3 karakter.');
+      Alert.alert('Validasi Gagal', 'Nama musim tanam minimal 3 karakter.');
       return;
     }
 
@@ -251,19 +335,30 @@ export default function DashboardScreen() {
     }
 
     setSubmitting(true);
-    const result = await createSiklus({
+    const payload = {
       nama: trimmedNama,
       tanaman: finalKomoditas,
-      tanggal_tanam: newSiklusTanggal.trim()
-    });
+      tanggal_tanam: newSiklusTanggal.trim(),
+      musim_sebelumnya_id: isLanjutan && selectedMusimSebelumnyaId ? selectedMusimSebelumnyaId : null
+    };
+
+    let result;
+    if (editingSiklusId) {
+      result = await updateSiklus(editingSiklusId, payload);
+    } else {
+      result = await createSiklus(payload);
+    }
     setSubmitting(false);
 
     if (result.success) {
-      Alert.alert('Sukses', 'Siklus tanam baru berhasil dibuat.');
+      Alert.alert('Sukses', editingSiklusId ? 'Musim tanam berhasil diperbarui.' : 'Musim tanam baru berhasil dibuat.');
+      setEditingSiklusId(null);
       setNewSiklusNama('');
       setSelectedKomoditasOption('Cabai Jawa');
       setCustomKomoditasText('');
       setNewSiklusTanggal(new Date().toISOString().split('T')[0]);
+      setIsLanjutan(false);
+      setSelectedMusimSebelumnyaId('');
       setModalVisible(false);
       fetchAllData();
     } else {
@@ -297,21 +392,21 @@ export default function DashboardScreen() {
     setFinishingSubmitting(false);
 
     if (res.success) {
-      Alert.alert('Sukses', `Siklus "${finishingSiklusItem.nama}" berhasil ditandai selesai.`);
+      Alert.alert('Sukses', `Musim "${finishingSiklusItem.nama}" berhasil ditandai selesai.`);
       setFinishModalVisible(false);
       setFinishingSiklusItem(null);
       setHasilPanenInput('');
       fetchAllData();
     } else {
-      Alert.alert('Gagal', res.error || 'Gagal mengubah status siklus.');
+      Alert.alert('Gagal', res.error || 'Gagal mengubah status musim.');
     }
   };
 
   // Handler Hapus Siklus Tanam
   const handleDeleteSiklusClick = (item) => {
     Alert.alert(
-      'Hapus Siklus Tanam',
-      `Apakah Anda yakin ingin menghapus siklus "${item.nama}" beserta seluruh data biayanya?`,
+      'Hapus Musim Tanam',
+      `Apakah Anda yakin ingin menghapus musim "${item.nama}" beserta seluruh data biayanya?`,
       [
         { text: 'Batal', style: 'cancel' },
         {
@@ -320,10 +415,10 @@ export default function DashboardScreen() {
           onPress: async () => {
             const res = await deleteSiklus(item.id);
             if (res.success) {
-              Alert.alert('Sukses', 'Siklus tanam berhasil dihapus.');
+              Alert.alert('Sukses', 'Musim tanam berhasil dihapus.');
               fetchAllData();
             } else {
-              Alert.alert('Gagal', res.error || 'Gagal menghapus siklus tanam.');
+              Alert.alert('Gagal', res.error || 'Gagal menghapus musim tanam.');
             }
           }
         }
@@ -410,6 +505,7 @@ export default function DashboardScreen() {
   }
 
   const siklus = dashboardData?.siklus_aktif;
+  const siklusAktifList = dashboardData?.siklus_aktif_list || (dashboardData?.siklus_aktif ? [dashboardData.siklus_aktif] : []);
   const totalSiklus = dashboardData?.total_siklus_aktif || 0;
   const totalBiaya = dashboardData?.total_biaya_bulan_ini || 0;
   const siklusHistory = dashboardData?.siklus_history || [];
@@ -580,7 +676,7 @@ export default function DashboardScreen() {
             <View style={styles.chartNoteContainer}>
               <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
               <Text style={styles.chartNoteText}>
-                Catatan: Rentang data mungkin tidak kontinu karena sensor dipindahkan secara periodik antar bedeng.
+                Catatan: Data bisa terlihat putus-putus karena sensor bergantian dipakai di bedeng lain.
               </Text>
             </View>
           </View>
@@ -602,120 +698,118 @@ export default function DashboardScreen() {
         <View style={styles.halfCard}>
           <View style={styles.cardHeaderIcon}>
             <Ionicons name="rose-outline" size={22} color={colors.primary} />
-            <Text style={styles.halfCardTitle}>Siklus Aktif</Text>
+            <Text style={styles.halfCardTitle}>Musim Aktif</Text>
           </View>
-          <Text style={styles.cycleCount}>{totalSiklus} Siklus</Text>
+          <Text style={styles.cycleCount}>{totalSiklus} Musim</Text>
           <Text style={styles.cardDesc}>Jumlah lahan berjalan</Text>
         </View>
       </View>
 
       {/* SECTION 4: DETAIL SIKLUS AKTIF UTAMA */}
       <View style={styles.sectionHeaderRow}>
-        <Text style={styles.sectionTitle}>Siklus Aktif Utama</Text>
-        <TouchableOpacity style={styles.addSiklusBtn} onPress={() => setModalVisible(true)}>
-          <Text style={styles.addSiklusBtnText}>+ Tambah Siklus</Text>
+        <Text style={styles.sectionTitle}>Musim Aktif Utama</Text>
+        <TouchableOpacity style={styles.addSiklusBtn} onPress={handleOpenAddModal}>
+          <Text style={styles.addSiklusBtnText}>+ Tambah Musim</Text>
         </TouchableOpacity>
       </View>
 
-      {siklus ? (
-        <View style={styles.cycleDetailCard}>
-          <View style={styles.cycleHeader}>
-            <View style={styles.cycleBadge}><Text style={styles.cycleBadgeText}>{siklus.tanaman?.toUpperCase() || 'CABAI JAWA'}</Text></View>
-            <View style={styles.activeStatusBadge}>
-              <View style={styles.dot} />
-              <Text style={styles.activeStatusText}>BERJALAN</Text>
+      {siklusAktifList.length > 0 ? (
+        siklusAktifList.map((item) => (
+          <View key={item.id} style={styles.cycleDetailCard}>
+            <View style={styles.cycleHeader}>
+              <View style={styles.cycleBadge}><Text style={styles.cycleBadgeText}>{item.tanaman?.toUpperCase() || 'CABAI JAWA'}</Text></View>
+              <View style={styles.activeStatusBadge}>
+                <View style={styles.dot} />
+                <Text style={styles.activeStatusText}>BERJALAN</Text>
+              </View>
+            </View>
+            <Text style={styles.cycleName}>{item.nama}</Text>
+            {item.musim_sebelumnya_nama && (
+              <View style={styles.lanjutanBadgeContainer}>
+                <Ionicons name="link-outline" size={13} color={colors.primary} />
+                <Text style={styles.lanjutanBadgeText}>Lanjutan dari: {item.musim_sebelumnya_nama}</Text>
+              </View>
+            )}
+            <View style={styles.cycleInfoRow}>
+              <Ionicons name="calendar-outline" size={15} color={colors.textMuted} />
+              <Text style={styles.cycleInfoText}>Mulai: {formatDate(item.tanggal_tanam)}</Text>
+            </View>
+
+            {/* Action Row: Edit, Tandai Selesai & Hapus */}
+            <View style={styles.cycleActionRow}>
+              <TouchableOpacity style={styles.editCycleBtn} onPress={() => handleOpenEditModal(item)}>
+                <Ionicons name="create-outline" size={16} color={colors.primary} />
+                <Text style={styles.editCycleBtnText}>Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.finishBtn} onPress={() => handleOpenFinishModal(item)}>
+                <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
+                <Text style={styles.finishBtnText}>Tandai Selesai</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.deleteCycleBtn} onPress={() => handleDeleteSiklusClick(item)}>
+                <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                <Text style={styles.deleteCycleBtnText}>Hapus</Text>
+              </TouchableOpacity>
             </View>
           </View>
-          <Text style={styles.cycleName}>{siklus.nama}</Text>
-          <View style={styles.cycleInfoRow}>
-            <Ionicons name="calendar-outline" size={15} color={colors.textMuted} />
-            <Text style={styles.cycleInfoText}>Mulai: {formatDate(siklus.tanggal_tanam)}</Text>
-          </View>
-
-          {/* Action Row: Tandai Selesai & Hapus */}
-          <View style={styles.cycleActionRow}>
-            <TouchableOpacity style={styles.finishBtn} onPress={() => handleOpenFinishModal(siklus)}>
-              <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
-              <Text style={styles.finishBtnText}>Tandai Selesai</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.deleteCycleBtn} onPress={() => handleDeleteSiklusClick(siklus)}>
-              <Ionicons name="trash-outline" size={16} color={colors.danger} />
-              <Text style={styles.deleteCycleBtnText}>Hapus</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        ))
       ) : (
         <View style={styles.emptyCard}>
           <Ionicons name="leaf-outline" size={32} color={colors.textMuted} />
-          <Text style={styles.emptyCardText}>Tidak ada siklus aktif saat ini.</Text>
+          <Text style={styles.emptyCardText}>Tidak ada musim aktif saat ini.</Text>
         </View>
       )}
 
       {/* SECTION 5: HISTORI SIKLUS TANAM */}
-      <Text style={styles.sectionTitle}>Histori Siklus Tanam</Text>
+      <Text style={styles.sectionTitle}>Histori Musim Tanam</Text>
       {siklusHistory.length > 0 ? (
-        siklusHistory.map((item) => {
-          const isBerjalan = item.status === 'berjalan' || item.status === 'AKTIF';
-          return (
-            <View key={item.id} style={styles.cycleDetailCard}>
-              <View style={styles.cycleHeader}>
-                <View style={styles.cycleBadge}>
-                  <Text style={styles.cycleBadgeText}>{item.tanaman?.toUpperCase() || 'TANAMAN'}</Text>
-                </View>
-                <View style={[
-                  styles.statusBadge,
-                  !isBerjalan ? styles.statusBadgeSelesai : styles.statusBadgeBerjalan
-                ]}>
-                  <Text style={[
-                    styles.statusBadgeText,
-                    !isBerjalan ? styles.textSelesai : styles.textBerjalan
-                  ]}>
-                    {isBerjalan ? 'BERJALAN' : 'SELESAI'}
-                  </Text>
-                </View>
+        siklusHistory.map((item) => (
+          <View key={item.id} style={styles.cycleDetailCard}>
+            <View style={styles.cycleHeader}>
+              <View style={styles.cycleBadge}>
+                <Text style={styles.cycleBadgeText}>{item.tanaman?.toUpperCase() || 'TANAMAN'}</Text>
               </View>
-
-              <Text style={styles.cycleName}>{item.nama}</Text>
-
-              <View style={styles.cycleInfoRow}>
-                <Ionicons name="calendar-outline" size={15} color={colors.textMuted} />
-                <Text style={styles.cycleInfoText}>
-                  {!isBerjalan
-                    ? `${formatDate(item.tanggal_tanam)} - ${formatDate(item.tanggal_panen)}`
-                    : `Mulai: ${formatDate(item.tanggal_tanam)}`
-                  }
+              <View style={[styles.statusBadge, styles.statusBadgeSelesai]}>
+                <Text style={[styles.statusBadgeText, styles.textSelesai]}>
+                  SELESAI
                 </Text>
               </View>
-
-              {item.hasil_panen && (
-                <View style={[styles.cycleInfoRow, { marginTop: 4 }]}>
-                  <Ionicons name="cube-outline" size={15} color={colors.primary} />
-                  <Text style={[styles.cycleInfoText, { fontWeight: '600', color: colors.text }]}>
-                    Hasil Panen: {item.hasil_panen} kg
-                  </Text>
-                </View>
-              )}
-
-              {/* Action Buttons */}
-              <View style={styles.cycleActionRow}>
-                {isBerjalan && (
-                  <TouchableOpacity style={styles.finishBtn} onPress={() => handleOpenFinishModal(item)}>
-                    <Ionicons name="checkmark-circle-outline" size={16} color="#fff" />
-                    <Text style={styles.finishBtnText}>Tandai Selesai</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity style={styles.deleteCycleBtn} onPress={() => handleDeleteSiklusClick(item)}>
-                  <Ionicons name="trash-outline" size={16} color={colors.danger} />
-                  <Text style={styles.deleteCycleBtnText}>Hapus</Text>
-                </TouchableOpacity>
-              </View>
             </View>
-          );
-        })
+
+            <Text style={styles.cycleName}>{item.nama}</Text>
+            {item.musim_sebelumnya_nama && (
+              <View style={styles.lanjutanBadgeContainer}>
+                <Ionicons name="link-outline" size={13} color={colors.primary} />
+                <Text style={styles.lanjutanBadgeText}>Lanjutan dari: {item.musim_sebelumnya_nama}</Text>
+              </View>
+            )}
+            <View style={styles.cycleInfoRow}>
+              <Ionicons name="calendar-outline" size={15} color={colors.textMuted} />
+              <Text style={styles.cycleInfoText}>
+                {formatDate(item.tanggal_tanam)} - {formatDate(item.tanggal_panen)}
+              </Text>
+            </View>
+
+            {item.hasil_panen && (
+              <View style={[styles.cycleInfoRow, { marginTop: 4 }]}>
+                <Ionicons name="cube-outline" size={15} color={colors.primary} />
+                <Text style={[styles.cycleInfoText, { fontWeight: '600', color: colors.text }]}>
+                  Hasil Panen: {item.hasil_panen} kg
+                </Text>
+              </View>
+            )}
+
+            {/* Action Buttons: Hapus saja (tanpa tombol Edit di Histori) */}
+            <View style={styles.cycleActionRow}>
+              <TouchableOpacity style={styles.deleteCycleBtn} onPress={() => handleDeleteSiklusClick(item)}>
+                <Ionicons name="trash-outline" size={16} color={colors.danger} />
+                <Text style={styles.deleteCycleBtnText}>Hapus</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ))
       ) : (
         <View style={styles.emptyCard}>
-          <Ionicons name="layers-outline" size={32} color={colors.textMuted} />
-          <Text style={styles.emptyCardText}>Belum ada riwayat siklus tanam.</Text>
+          <Text style={styles.emptyCardText}>Belum ada histori musim tanam yang selesai.</Text>
         </View>
       )}
 
@@ -760,9 +854,9 @@ export default function DashboardScreen() {
                 <Ionicons name={updatingDevice?.bedeng_id === "" ? "radio-button-on" : "radio-button-off"} size={20} color={updatingDevice?.bedeng_id === "" ? colors.primary : colors.textMuted} />
                 <Text style={[styles.dropdownOptionText, updatingDevice?.bedeng_id === "" && styles.activeDropdownOptionText]}>Nonaktifkan (Tarik dari Lahan)</Text>
               </TouchableOpacity>
-              
+
               {/* Daftar Bedeng */}
-              {bedengs.map(b => (
+              {getFilteredBedengsForDevice(updatingDevice).map(b => (
                 <TouchableOpacity
                   key={b.id}
                   style={[styles.dropdownOption, String(updatingDevice?.bedeng_id) === String(b.id) && styles.activeDropdownOption]}
@@ -779,18 +873,18 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* MODAL TAMBAH SIKLUS BARU */}
-      <Modal animationType="slide" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
+      {/* MODAL TAMBAH / EDIT MUSIM */}
+      <Modal animationType="slide" transparent={true} visible={modalVisible} onRequestClose={() => { setModalVisible(false); setEditingSiklusId(null); }}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={{ flex: 1 }}
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Mulai Siklus Tanam Baru</Text>
+              <Text style={styles.modalTitle}>{editingSiklusId ? 'Edit Musim Tanam' : 'Mulai Musim Tanam Baru'}</Text>
 
               <View style={styles.formGroup}>
-                <Text style={styles.modalInputLabel}>Nama Siklus Tanam (min. 3 karakter)</Text>
+                <Text style={styles.modalInputLabel}>Nama Musim Tanam (min. 3 karakter)</Text>
                 <TextInput
                   style={styles.modalInput}
                   placeholder="Contoh: Demplot Cabai Blok A"
@@ -837,8 +931,63 @@ export default function DashboardScreen() {
                 />
               </View>
 
+              {/* HUBUNGAN ANTA MUSIM (LINKING) */}
+              <View style={styles.formGroup}>
+                <Text style={styles.modalInputLabel}>Apakah musim ini lanjutan dari musim sebelumnya?</Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                  <TouchableOpacity
+                    style={[styles.chipBtn, !isLanjutan && styles.activeChipBtn]}
+                    onPress={() => { setIsLanjutan(false); setSelectedMusimSebelumnyaId(''); }}
+                  >
+                    <Text style={[styles.chipText, !isLanjutan && styles.activeChipText]}>Bukan (Musim Baru)</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.chipBtn, isLanjutan && styles.activeChipBtn]}
+                    onPress={() => setIsLanjutan(true)}
+                  >
+                    <Text style={[styles.chipText, isLanjutan && styles.activeChipText]}>Ya, Lanjutan</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {isLanjutan && (
+                <View style={styles.formGroup}>
+                  <Text style={styles.modalInputLabel}>Pilih Musim Sebelumnya (yang sudah selesai):</Text>
+                  {getAvailableParentSeasons(siklusHistory, editingSiklusId).length > 0 ? (
+                    <View style={{ gap: 6, marginTop: 6 }}>
+                      {getAvailableParentSeasons(siklusHistory, editingSiklusId).map(parent => (
+                        <TouchableOpacity
+                          key={parent.id}
+                          style={[
+                            styles.dropdownOption,
+                            String(selectedMusimSebelumnyaId) === String(parent.id) && styles.activeDropdownOption
+                          ]}
+                          onPress={() => setSelectedMusimSebelumnyaId(String(parent.id))}
+                        >
+                          <Ionicons
+                            name={String(selectedMusimSebelumnyaId) === String(parent.id) ? "radio-button-on" : "radio-button-off"}
+                            size={18}
+                            color={String(selectedMusimSebelumnyaId) === String(parent.id) ? colors.primary : colors.textMuted}
+                          />
+                          <Text style={[
+                            styles.dropdownOptionText,
+                            String(selectedMusimSebelumnyaId) === String(parent.id) && styles.activeDropdownOptionText
+                          ]}>
+                            {parent.nama} ({parent.tanaman})
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : (
+                    <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 4, fontStyle: 'italic' }}>
+                      Tidak ada musim selesai yang tersedia untuk dijadikan induk lanjutan.
+                    </Text>
+                  )}
+                </View>
+              )}
+
               <View style={styles.modalActionRow}>
-                <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)} disabled={submitting}>
+                <TouchableOpacity style={styles.cancelBtn} onPress={() => { setModalVisible(false); setEditingSiklusId(null); }} disabled={submitting}>
                   <Text style={styles.cancelBtnText}>Batal</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.submitBtn} onPress={handleAddSiklusSubmit} disabled={submitting}>
@@ -858,9 +1007,9 @@ export default function DashboardScreen() {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Tandai Siklus Selesai</Text>
+              <Text style={styles.modalTitle}>Tandai Musim Selesai</Text>
               <Text style={{ fontSize: 13, color: colors.textMuted, marginBottom: 14 }}>
-                Siklus: <Text style={{ fontWeight: 'bold', color: colors.text }}>{finishingSiklusItem?.nama}</Text>
+                Musim: <Text style={{ fontWeight: 'bold', color: colors.text }}>{finishingSiklusItem?.nama}</Text>
               </Text>
 
               <View style={styles.formGroup}>
@@ -1278,6 +1427,37 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  editCycleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(46, 125, 50, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 4,
+  },
+  editCycleBtnText: {
+    color: colors.primary,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  lanjutanBadgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(46, 125, 50, 0.08)',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  lanjutanBadgeText: {
+    fontSize: 11,
+    color: colors.primary,
+    fontWeight: '600',
   },
   deleteCycleBtn: {
     flexDirection: 'row',
